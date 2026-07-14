@@ -1,0 +1,62 @@
+{
+  "name": "cloudsub",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "A self-hosted subscription configuration manager for Cloudflare Workers.",
+  "scripts": {
+    "dev": "npm run build && wrangler dev",
+    "dev:ui": "vite",
+    "build": "vite build",
+    "deploy": "npm run build && npm run db:migrate:remote && wrangler deploy",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "wrangler d1 migrations apply DB --local",
+    "db:migrate:remote": "wrangler d1 migrations apply DB --remote",
+    "lint": "eslint . --max-warnings=0",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "drizzle-orm": "^0.45.2",
+    "hono": "^4.12.30",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "yaml": "^2.9.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.18.4",
+    "@cloudflare/workers-types": "^5.20260714.1",
+    "@eslint/js": "^10.0.0",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.3",
+    "drizzle-kit": "^0.31.10",
+    "eslint": "^10.7.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.3",
+    "globals": "^17.7.0",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.64.0",
+    "vite": "^8.1.4",
+    "vitest": "^4.1.10",
+    "wrangler": "^4.110.0"
+  },
+  "engines": {
+    "node": ">=22.12"
+  },
+  "cloudflare": {
+    "bindings": {
+      "APP_SECRET": {
+        "description": "Generate a random secret with `openssl rand -base64 32`."
+      },
+      "DATA_ENCRYPTION_KEY": {
+        "description": "Generate a separate random key with `openssl rand -base64 32`."
+      },
+      "INITIAL_ADMIN_TOKEN": {
+        "description": "Optional setup token. If set, enter it during first-time initialization."
+      }
+    }
+  }
+}

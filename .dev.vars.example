@@ -1,0 +1,5 @@
+# Copy this file to .dev.vars for local development. Never commit real values.
+APP_SECRET=replace-with-a-random-32-byte-secret
+DATA_ENCRYPTION_KEY=replace-with-a-different-random-32-byte-secret
+# Optional. When set, first-time setup must provide this value.
+INITIAL_ADMIN_TOKEN=
