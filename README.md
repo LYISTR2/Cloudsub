@@ -2,6 +2,8 @@
 
 > 部署在 Cloudflare Workers 上的订阅节点管理与分发系统。
 
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/LYISTR2/Cloudsub)
+
 ## 功能概览
 
 - **一键部署** — 从 GitHub 部署到自己的 Cloudflare 账户
@@ -36,13 +38,26 @@
 
 ## 快速部署
 
-### 前置条件
+### Cloudflare 一键部署
+
+点击 README 顶部的 **Deploy to Cloudflare** 按钮，登录 Cloudflare 后按向导完成部署。Cloudflare 会从本仓库创建项目，自动配置 Worker、D1 数据库和 KV 命名空间，并使用仓库中的 `build` / `deploy` 脚本构建前端、应用 D1 migrations 后发布。
+
+部署向导会要求配置两个互不相同的随机密钥：
+
+- `APP_SECRET` — 会话与订阅令牌的 HMAC 密钥
+- `DATA_ENCRYPTION_KEY` — 数据源敏感内容的 AES-GCM 加密密钥
+
+可选配置 `INITIAL_ADMIN_TOKEN`，为首次初始化增加一层部署侧验证。部署完成后访问生成的 `workers.dev` 地址创建管理员账户。
+
+### 手动部署
+
+#### 前置条件
 
 - Cloudflare 账户
 - Node.js 22+
 - npm
 
-### 步骤
+#### 步骤
 
 1. **Fork / Clone 本仓库**
 
