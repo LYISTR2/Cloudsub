@@ -1,91 +1,178 @@
 # CloudSub
 
-[![CI](https://github.com/LYISTR2/Cloudsub/actions/workflows/ci.yml/badge.svg)](https://github.com/LYISTR2/Cloudsub/actions/workflows/ci.yml)
-[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/LYISTR2/Cloudsub)
+> 部署在 Cloudflare Workers 上的订阅节点管理与分发系统。
 
-CloudSub 是一个部署在 Cloudflare Workers 上的自托管订阅配置管理与分发系统。它从你拥有或已获授权的配置中导入节点，完成解析、去重、组合和格式转换，再通过带令牌的地址分发。
+## 功能概览
 
-CloudSub **不创建、出售或运行网络节点**，不提供扫描、探针、代理进程安装、套餐计费或第三方访问控制绕过能力。
+- **一键部署** — 从 GitHub 部署到自己的 Cloudflare 账户
+- **多源导入** — 支持订阅 URL、手动粘贴配置文件，加密存储敏感数据
+- **智能解析** — 自动识别 Base64、Clash YAML、URI 列表、内部 JSON 格式
+- **节点处理** — 解析、去重（指纹）、分组、过滤、正则重命名、排序
+- **多格式输出** — Mihomo (Clash Meta) / Sing-box / Raw Base64 / JSON
+- **订阅令牌** — 带访问令牌的订阅地址，支持过期时间和令牌轮换
+- **定时刷新** — Cron 定时拉取上游订阅，自动更新缓存
+- **管理后台** — 轻量 SPA 管理界面，支持数据源、节点、订阅、审计日志管理
+- **安全防护** — SSRF 防护、AES-GCM 加密、PBKDF2 密码哈希、CSRF 保护、登录限流
 
-## 当前版本
+## 支持的协议
 
-`0.1.0` 提供一条完整的 MVP 链路：
+| 协议 | URI 解析 | Clash YAML 解析 | Sing-box 输出 |
+|------|---------|----------------|--------------|
+| Shadowsocks (ss) | ✅ | ✅ | ✅ |
+| VMess | ✅ | ✅ | ✅ |
+| VLESS | ✅ | ✅ | ✅ |
+| Trojan | ✅ | ✅ | ✅ |
+| Hysteria2 | ✅ | ✅ | ✅ |
+| TUIC | ✅ | ✅ | ✅ |
 
-- 单管理员初始化、PBKDF2 密码哈希、HMAC 令牌索引、D1 会话、HttpOnly Cookie 与 CSRF 防护
-- HTTPS URL 与手动数据源；完整上游 URL、敏感请求头和手动原文使用 AES-GCM 加密
-- Clash/Mihomo YAML、Base64 URI 列表、常见单行 URI、内部 JSON 输入适配器
-- 节点标准化、稳定指纹、单源去重、筛选、启停与标签
-- 多数据源组合订阅、256 位随机令牌、只存令牌哈希、令牌轮换
-- Raw Base64、Mihomo YAML、内部 JSON 输出适配器
-- KV 修订号缓存、ETag、条件请求和统一的无效令牌响应
-- 30 分钟 Cron 扫描、手动/定时刷新共用业务服务、审计与刷新日志
-- React 管理控制台、D1 migrations、Workers Vitest 测试和 GitHub Actions CI
+## 支持的输出格式
 
-协议输入目前重点覆盖 `ss`、`vmess`、`vless`、`trojan`、`hysteria2` 与 `tuic` 的常用字段。复杂插件、非标准 URI 和第二阶段输出格式尚不保证完整保真。
+| 格式 | target 参数 | 说明 |
+|------|-----------|------|
+| **Mihomo / Clash Meta** | `mihomo` | 完整 YAML 配置，含 proxy-groups（自动选择 / 手动选择）和分流规则（AI / Telegram / 流媒体 / Apple / 国内直连） |
+| **Sing-box** | `singbox` | 完整 JSON 配置，含 outbounds（selector / urltest / direct / dns）、DNS 分流、路由规则 |
+| **Raw Base64** | `raw` | 标准 Base64 编码的 URI 列表，保留全部传输参数（ws path / host / flow / alpn / obfs 等） |
+| **JSON** | `json` | 内部 NormalizedNode JSON，供 API 对接使用 |
 
-## 一键部署
+## 快速部署
 
-点击顶部的 **Deploy to Cloudflare** 按钮。Cloudflare 会从公开仓库创建 Worker，并根据 `wrangler.jsonc` 自动配置 D1 与 KV。
+### 前置条件
 
-部署时需要提供两个互不相同的随机密钥：
+- Cloudflare 账户
+- Node.js 22+
+- npm
 
-```bash
-openssl rand -base64 32 # APP_SECRET
-openssl rand -base64 32 # DATA_ENCRYPTION_KEY
+### 步骤
+
+1. **Fork / Clone 本仓库**
+
+2. **安装依赖**
+   ```bash
+   npm ci
+   ```
+
+3. **配置 Secrets**
+   ```bash
+   cp .dev.vars.example .dev.vars
+   ```
+   编辑 `.dev.vars`，填入：
+   ```
+   APP_SECRET=<随机32字节密钥>
+   DATA_ENCRYPTION_KEY=<随机32字节密钥>
+   ```
+   生成密钥：`openssl rand -base64 32`
+
+4. **创建 Cloudflare 资源**
+   ```bash
+   npx wrangler d1 create cloudsub
+   npx wrangler kv namespace create CACHE
+   ```
+   将返回的 ID 填入 `wrangler.jsonc`。
+
+5. **运行数据库迁移**
+   ```bash
+   npx wrangler d1 migrations apply cloudsub
+   ```
+
+6. **部署**
+   ```bash
+   npm run deploy
+   ```
+
+7. **初始化管理员**
+   访问部署后的 URL，首次进入会提示创建管理员账户。
+
+### GitHub Actions 自动部署
+
+在仓库 Settings → Secrets 中配置：
+- `CLOUDFLARE_API_TOKEN`
+- `CLOUDFLARE_ACCOUNT_ID`
+
+然后在 Actions 页面手动触发 `Deploy to Cloudflare` workflow。
+
+## 订阅地址格式
+
+```
+https://<your-worker>.workers.dev/sub/<token>?target=mihomo
 ```
 
-可选设置 `INITIAL_ADMIN_TOKEN`，为首次初始化增加一个部署侧令牌。部署脚本会先构建前端、对 `DB` 绑定应用 migrations，再部署 Worker。完成后访问 Worker 地址并在 `/setup` 创建管理员。
-
-> 密钥丢失后，加密的数据源原文无法恢复。请使用 Cloudflare Secrets 安全保存，并建立账户侧备份流程。
-
-## 本地开发
-
-要求 Node.js 22.12 或更高版本。
-
-```bash
-npm install
-cp .dev.vars.example .dev.vars
-# 编辑 .dev.vars，填入两个独立随机密钥
-npm run db:migrate
-npm run dev
-```
-
-`npm run dev` 会先构建 React 静态资源，再由 Wrangler 启动包含 D1、KV 和 Assets 的本地 Worker。只开发界面时可另用 `npm run dev:ui`；Vite 会把 API 请求代理到 `8787` 端口。
-
-常用检查：
-
-```bash
-npm run lint
-npm run typecheck
-npm test
-npm run build
-```
-
-## 公共订阅接口
-
-```text
-GET /sub/{token}
-GET /sub/{token}?target=raw
-GET /sub/{token}?target=mihomo
-GET /sub/{token}?target=json
-```
-
-完整管理 API 见 [docs/api.md](docs/api.md)。部署、架构与安全说明分别见：
-
-- [部署说明](docs/deployment.md)
-- [系统架构](docs/architecture.md)
-- [数据库设计](docs/database.md)
-- [安全模型](docs/security.md)
-- [开发指南](docs/development.md)
+| 参数 | 说明 |
+|------|------|
+| `token` | 订阅访问令牌（创建订阅时生成） |
+| `target` | 可选，`mihomo` / `singbox` / `raw` / `json`，默认使用订阅配置的 `defaultTarget` |
 
 ## 技术栈
 
-Cloudflare Workers + Hono + TypeScript、React + Vite、D1、KV、Drizzle schema、Zod、Vitest Workers pool。仓库保持单包、单 Worker、前后端一体部署，以兼容 Deploy to Cloudflare。
+| 组件 | 技术 |
+|------|------|
+| 运行时 | Cloudflare Workers |
+| 数据库 | Cloudflare D1 (SQLite) |
+| 缓存 | Cloudflare KV |
+| 后端框架 | Hono |
+| 前端 | React + Vite |
+| ORM / 迁移 | Drizzle ORM |
+| 校验 | Zod |
+| 加密 | Web Crypto API (AES-GCM, PBKDF2, HMAC-SHA256) |
 
-## 合规与使用边界
+## 安全特性
 
-你只能导入并分发自己拥有或已明确获授权使用的配置。禁止使用本项目从事未经授权的访问、公共节点采集、凭据滥用或违反适用法律与服务条款的活动。部署者对导入内容、访问令牌管理和实际使用方式负责。
+- **SSRF 防护** — 拦截私有 IP (10.x / 127.x / 169.254.x / 172.16-31.x / 192.168.x)、链路本地、保留地址；强制 HTTPS；重定向重新校验
+- **数据加密** — 数据源的 URL、请求头、内容使用 AES-256-GCM 加密存储
+- **密码哈希** — PBKDF2-SHA256，210,000 次迭代
+- **会话管理** — HMAC 存储的 session token，HttpOnly + Secure + SameSite=Strict cookie
+- **CSRF 保护** — 双重 token（cookie + header），常量时间比较
+- **登录限流** — 5 次失败后锁定 15 分钟
+- **订阅限流** — 每 IP 每分钟 120 次请求
+- **审计日志** — 所有管理操作记录到 audit_logs
+
+## 项目结构
+
+```
+src/
+├── shared/
+│   └── types.ts              # 共享类型定义
+├── worker/
+│   ├── index.ts              # Worker 入口 (fetch + scheduled)
+│   ├── app.ts                # Hono 路由 (37KB, 全部 API)
+│   ├── env.ts                # 环境变量绑定
+│   ├── adapters/
+│   │   ├── input/            # 输入解析器
+│   │   │   ├── index.ts      #   格式自动探测
+│   │   │   ├── uri-list.parser.ts  # ss/vmess/vless/trojan/hy2/tuic URI
+│   │   │   ├── clash.parser.ts     # Clash YAML
+│   │   │   ├── internal-json.parser.ts
+│   │   │   └── shared.ts     #   base64 / fingerprint / port
+│   │   └── output/
+│   │       └── index.ts      # Mihomo / Sing-box / Raw / JSON 渲染
+│   ├── services/
+│   │   ├── sources.ts        # 数据源刷新逻辑
+│   │   ├── subscriptions.ts  # 订阅生成 + 令牌
+│   │   ├── auth.ts           # 会话 / CSRF / 限流
+│   │   └── audit.ts          # 审计日志
+│   ├── security/
+│   │   ├── crypto.ts         # AES-GCM / HMAC / SHA-256
+│   │   ├── password.ts       # PBKDF2
+│   │   └── safe-fetch.ts     # SSRF 防护
+│   └── db/
+│       └── schema.ts         # Drizzle schema
+├── dashboard/
+│   ├── App.tsx               # 管理 SPA
+│   ├── api.ts                # API 客户端
+│   └── styles.css
+migrations/
+└── 0001_initial.sql          # D1 初始迁移
+```
+
+## 开发
+
+```bash
+npm run dev        # 本地开发 (Wrangler dev)
+npm run build      # 构建前端
+npm run lint       # ESLint
+npm run typecheck  # TypeScript 类型检查
+npm test           # Vitest 单元 + 集成测试
+```
 
 ## License
 
-[MIT](LICENSE)
+MIT

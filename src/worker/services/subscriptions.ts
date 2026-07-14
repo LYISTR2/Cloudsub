@@ -31,13 +31,13 @@ interface NodeRow {
   enabled: number;
 }
 
-export async function issueSubscriptionToken(env: Env, subscriptionId: string): Promise<{ token: string; prefix: string }> {
+export async function issueSubscriptionToken(env: Env, subscriptionId: string, expiresAt?: string): Promise<{ token: string; prefix: string }> {
   if (!env.APP_SECRET) throw new AppError(503, "尚未配置应用密钥", "missing_app_secret");
   const token = randomToken(32);
   const prefix = token.slice(0, 8);
   await env.DB.prepare(
-    "INSERT INTO subscription_tokens (id, subscription_id, token_hash, token_prefix, enabled, created_at) VALUES (?, ?, ?, ?, 1, ?)",
-  ).bind(crypto.randomUUID(), subscriptionId, await hmacSha256Hex(env.APP_SECRET, token), prefix, new Date().toISOString()).run();
+    "INSERT INTO subscription_tokens (id, subscription_id, token_hash, token_prefix, enabled, expires_at, created_at) VALUES (?, ?, ?, ?, 1, ?, ?)",
+  ).bind(crypto.randomUUID(), subscriptionId, await hmacSha256Hex(env.APP_SECRET, token), prefix, expiresAt ?? null, new Date().toISOString()).run();
   return { token, prefix };
 }
 
@@ -80,7 +80,7 @@ export async function generateSubscription(env: Env, token: string, requestedTar
     throw new AppError(404, "订阅不可用", "subscription_unavailable");
   }
   const target = (requestedTarget || access.default_target) as SubscriptionTarget;
-  if (!["raw", "mihomo", "json"].includes(target)) throw new AppError(404, "订阅不可用", "subscription_unavailable");
+  if (!["raw", "mihomo", "singbox", "json"].includes(target)) throw new AppError(404, "订阅不可用", "subscription_unavailable");
   const cacheKey = "subscription:" + access.subscription_id + ":" + target + ":" + access.revision;
   const cached = await env.CACHE.get<{ body: string; contentType: string; extension: string; etag: string }>(cacheKey, "json");
   const cacheTtl = Math.max(60, Math.min(access.cache_ttl || Number(env.SUB_CACHE_TTL) || 300, 86_400));

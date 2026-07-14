@@ -97,11 +97,16 @@ export async function refreshSource(env: Env, sourceId: string, options: { force
 
 export async function refreshDueSources(env: Env): Promise<void> {
   const now = new Date().toISOString();
+  // Refresh due sources — process in batches of 10, sorted by next_refresh_at
   const result = await env.DB.prepare(
-    "SELECT id FROM sources WHERE enabled = 1 AND type = 'url' AND (next_refresh_at IS NULL OR next_refresh_at <= ?) ORDER BY next_refresh_at ASC LIMIT 10",
+    "SELECT id FROM sources WHERE enabled = 1 AND type = 'url' AND (next_refresh_at IS NULL OR next_refresh_at <= ?) ORDER BY next_refresh_at ASC NULLS FIRST LIMIT 20",
   ).bind(now).all<{ id: string }>();
   for (const source of result.results) {
     try { await refreshSource(env, source.id); } catch { /* The refresh service records a sanitized failure log. */ }
   }
+  // Clean up expired sessions
   await env.DB.prepare("DELETE FROM sessions WHERE expires_at <= ?").bind(now).run();
+  // Clean up old fetch logs (keep last 7 days)
+  const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  await env.DB.prepare("DELETE FROM source_fetch_logs WHERE created_at <= ?").bind(cutoff).run();
 }
