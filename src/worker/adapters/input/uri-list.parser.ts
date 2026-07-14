@@ -103,6 +103,17 @@ async function parseUrlNode(uri: string): Promise<NormalizedNode | undefined> {
   if (query.get("alpn")) config.alpn = query.get("alpn")?.split(",");
   if (query.get("allowInsecure") === "1") config["skip-cert-verify"] = true;
   if (query.get("path")) config["ws-opts"] = { path: query.get("path"), headers: query.get("host") ? { Host: query.get("host") } : undefined };
+  // Hysteria2 obfs
+  if (normalizedProtocol === "hysteria2") {
+    if (query.get("obfs")) config.obfs = query.get("obfs");
+    if (query.get("obfs-password")) config["obfs-password"] = query.get("obfs-password");
+    if (query.get("up")) config.up = query.get("up");
+    if (query.get("down")) config.down = query.get("down");
+  }
+  // TUIC congestion control
+  if (normalizedProtocol === "tuic") {
+    if (query.get("congestion_control")) config["congestion-controller"] = query.get("congestion_control");
+  }
   return completeNode({ name, protocol: normalizedProtocol, server: url.hostname, port, config, rawUri: uri });
 }
 

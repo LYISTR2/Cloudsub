@@ -1,4 +1,4 @@
-export type SubscriptionTarget = "raw" | "mihomo" | "json";
+export type SubscriptionTarget = "raw" | "mihomo" | "singbox" | "json";
 
 export interface NormalizedNode {
   id?: string;

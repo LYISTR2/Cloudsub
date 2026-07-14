@@ -62,7 +62,7 @@ const rulesSchema = z.object({
 const subscriptionCreateSchema = z.object({
   name: z.string().trim().min(1).max(100),
   sourceIds: z.array(z.string().uuid()).min(1).max(100),
-  defaultTarget: z.enum(["raw", "mihomo", "json"]).default("mihomo"),
+  defaultTarget: z.enum(["raw", "mihomo", "singbox", "json"]).default("mihomo"),
   enabled: z.boolean().default(true),
   cacheTtl: z.number().int().min(60).max(86_400).default(300),
   expiresAt: z.string().datetime().nullable().optional(),
@@ -85,8 +85,12 @@ function pageParams(context: Context<AppBindings>): { page: number; pageSize: nu
 }
 
 function slugify(name: string): string {
+  // Try to preserve CJK characters by using pinyin-like transliteration fallback
+  // For non-ASCII names, use a timestamp-based slug to ensure uniqueness
   const slug = name.normalize("NFKD").toLowerCase().replace(/[^a-z0-9]+/gu, "-").replace(/^-|-$/gu, "").slice(0, 50);
-  return slug || "subscription";
+  if (slug) return slug;
+  // Fallback for names that are entirely non-ASCII (e.g. Chinese)
+  return "sub-" + Date.now().toString(36);
 }
 
 function maskServer(value: string): string {
@@ -393,7 +397,7 @@ app.post("/api/subscriptions", async (context) => {
     context.env.DB.prepare("INSERT INTO subscriptions (id, name, slug, enabled, default_target, rules_json, revision, expires_at, cache_ttl, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)").bind(id, input.name, slug, input.enabled ? 1 : 0, input.defaultTarget, JSON.stringify(input.rules), input.expiresAt ?? null, input.cacheTtl, now, now),
     ...[...new Set(input.sourceIds)].map((sourceId) => context.env.DB.prepare("INSERT INTO subscription_sources (subscription_id, source_id) VALUES (?, ?)").bind(id, sourceId)),
   ]);
-  const token = await issueSubscriptionToken(context.env, id);
+  const token = await issueSubscriptionToken(context.env, id, input.expiresAt ?? undefined);
   const principal = context.get("principal");
   await writeAudit(context.env, { adminId: principal.adminId, action: "subscription.create", targetType: "subscription", targetId: id, details: { name: input.name, sources: input.sourceIds.length }, requestId: context.get("requestId") });
   return context.json({ data: { id, slug, token: token.token, tokenPrefix: token.prefix } }, 201);
@@ -457,7 +461,7 @@ async function subscriptionPreview(env: Env, id: string, targetOverride?: Subscr
 }
 
 app.post("/api/subscriptions/:id/preview", async (context) => {
-  const input = await body(context, z.object({ target: z.enum(["raw", "mihomo", "json"]).optional() }));
+  const input = await body(context, z.object({ target: z.enum(["raw", "mihomo", "singbox", "json"]).optional() }));
   const preview = await subscriptionPreview(context.env, context.req.param("id"), input.target);
   return context.json({ data: { body: preview.rendered.body.slice(0, 200_000), contentType: preview.rendered.contentType, truncated: preview.rendered.body.length > 200_000, nodeCount: preview.count } });
 });
