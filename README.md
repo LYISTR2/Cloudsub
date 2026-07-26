@@ -131,7 +131,7 @@ https://<your-worker>.workers.dev/sub/<token>?target=mihomo
 
 ## 安全特性
 
-- **SSRF 防护** — 拦截私有 IP (10.x / 127.x / 169.254.x / 172.16-31.x / 192.168.x)、链路本地、保留地址；强制 HTTPS；重定向重新校验
+- **SSRF 防护** — 拦截私有 IP (10.x / 127.x / 169.254.x / 172.16-31.x / 192.168.x)、链路本地、保留地址；归一化十进制/十六进制/八进制/短式 IPv4 编码；识别 IPv4-mapped、IPv4-compatible 与 NAT64 IPv6 中内嵌的 IPv4；强制 HTTPS；重定向重新校验
 - **数据加密** — 数据源的 URL、请求头、内容使用 AES-256-GCM 加密存储
 - **密码哈希** — PBKDF2-SHA256，210,000 次迭代
 - **会话管理** — HMAC 存储的 session token，HttpOnly + Secure + SameSite=Strict cookie
@@ -148,7 +148,16 @@ src/
 │   └── types.ts              # 共享类型定义
 ├── worker/
 │   ├── index.ts              # Worker 入口 (fetch + scheduled)
-│   ├── app.ts                # Hono 路由 (37KB, 全部 API)
+│   ├── app.ts                # 组装：中间件 + 顺序挂载路由 + 错误处理
+│   ├── http.ts               # 请求辅助 (body / 分页 / slug / 脱敏)
+│   ├── validation.ts         # 集中的 Zod 请求体 schema
+│   ├── routes/               # 按资源拆分的路由模块
+│   │   ├── public.ts         #   健康检查 / 初始化 / 登录 / 订阅下载 (免鉴权)
+│   │   ├── account.ts        #   会话 / 登出 / 改密
+│   │   ├── sources.ts        #   数据源 CRUD / 刷新 / 日志
+│   │   ├── nodes.ts          #   节点查询 / 更新 / 批量
+│   │   ├── subscriptions.ts  #   订阅 CRUD / 预览 / 令牌 / 缓存
+│   │   └── system.ts         #   概览 / 设置 / 审计日志
 │   ├── env.ts                # 环境变量绑定
 │   ├── adapters/
 │   │   ├── input/            # 输入解析器
@@ -187,6 +196,10 @@ npm run lint       # ESLint
 npm run typecheck  # TypeScript 类型检查
 npm test           # Vitest 单元 + 集成测试
 ```
+
+## 更新日志
+
+见 [CHANGELOG.md](./CHANGELOG.md)；本次 `0.2.0` 优化升级的详细说明见 [docs/upgrade-notes.md](./docs/upgrade-notes.md)。
 
 ## License
 

@@ -87,6 +87,8 @@ export const nodes = sqliteTable(
   (table) => [
     uniqueIndex("nodes_source_fingerprint_unique").on(table.sourceId, table.fingerprint),
     index("idx_nodes_source_present").on(table.sourceId, table.present),
+    // Covers the hot subscription-generation filter (source_id + present + enabled).
+    index("idx_nodes_source_present_enabled").on(table.sourceId, table.present, table.enabled),
     index("idx_nodes_protocol_enabled").on(table.protocol, table.enabled, table.present),
     index("idx_nodes_fingerprint").on(table.fingerprint),
   ],
@@ -107,7 +109,7 @@ export const subscriptions = sqliteTable("subscriptions", {
   name: text("name").notNull(),
   slug: text("slug").notNull().unique(),
   enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
-  defaultTarget: text("default_target", { enum: ["raw", "mihomo", "json"] }).notNull().default("mihomo"),
+  defaultTarget: text("default_target", { enum: ["raw", "mihomo", "singbox", "json"] }).notNull().default("mihomo"),
   rulesJson: text("rules_json").notNull().default("{}"),
   templateId: text("template_id").references(() => templates.id, { onDelete: "set null" }),
   revision: integer("revision").notNull().default(1),
@@ -139,7 +141,11 @@ export const subscriptionTokens = sqliteTable(
     expiresAt: text("expires_at"),
     createdAt: text("created_at").notNull(),
   },
-  (table) => [uniqueIndex("subscription_tokens_hash_unique").on(table.tokenHash)],
+  (table) => [
+    uniqueIndex("subscription_tokens_hash_unique").on(table.tokenHash),
+    // Speeds up "latest enabled token per subscription" lookups in the list views.
+    index("idx_subscription_tokens_subscription").on(table.subscriptionId, table.enabled, table.createdAt),
+  ],
 );
 
 export const auditLogs = sqliteTable(
