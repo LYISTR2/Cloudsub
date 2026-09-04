@@ -51,12 +51,12 @@ interface Subscription {
 }
 
 const navigation = [
-  { path: "/dashboard", label: "概览", icon: "◫" },
-  { path: "/sources", label: "数据源", icon: "↗" },
+  { path: "/dashboard", label: "概览", icon: "▸" },
+  { path: "/sources", label: "数据源", icon: "↥" },
   { path: "/nodes", label: "节点", icon: "◉" },
-  { path: "/subscriptions", label: "订阅", icon: "⌁" },
+  { path: "/subscriptions", label: "订阅", icon: "§" },
   { path: "/logs", label: "日志", icon: "≡" },
-  { path: "/settings", label: "设置", icon: "⚙" },
+  { path: "/settings", label: "设置", icon: "∗" },
 ];
 
 function formatTime(value: string | null | undefined): string {
@@ -70,7 +70,7 @@ function NoticeBar({ notice, onClose }: { notice: Notice; onClose: () => void })
 }
 
 function Logo() {
-  return <div className="logo"><span className="logo-mark">C</span><span><strong>CloudSub</strong><small>EDGE SUBSCRIPTIONS</small></span></div>;
+  return <div className="logo"><span className="logo-mark">C</span><span><strong>CloudSub</strong><small>EDGE SUBSCRIPTION OPS</small></span></div>;
 }
 
 function AuthFrame({ eyebrow, title, description, children }: { eyebrow: string; title: string; description: string; children: ReactNode }) {
@@ -159,7 +159,7 @@ function Shell({ session, path, navigate, logout, children }: { session: Session
         <div className="sidebar-foot"><div className="avatar">{session.username.slice(0, 1).toUpperCase()}</div><div><strong>{session.username}</strong><small>系统管理员</small></div><button className="icon-button" title="退出" onClick={logout}>↪</button></div>
       </aside>
       <main className="content">
-        <header className="topbar"><div><p className="eyebrow">CloudSub Console</p><h1>{active.label}</h1></div><div className="edge-state"><span className="pulse" /> Edge online</div></header>
+        <header className="topbar"><div><p className="eyebrow">CloudSub Console</p><h1>{active.label}</h1></div><div className="edge-state"><span className="pulse" /> SYS: NOMINAL</div></header>
         {children}
       </main>
     </div>
@@ -170,13 +170,13 @@ function DashboardPage() {
   const [data, setData] = useState<{ counts: { sources: number; nodes: number; subscriptions: number }; recentErrors: Array<{ name: string; error: string; created_at: string }>; lastSubscriptionAccess: string | null }>();
   useEffect(() => { void api<typeof data>("/api/dashboard").then(setData); }, []);
   const cards = [
-    { label: "启用数据源", value: data?.counts.sources ?? "—", note: "持续同步", color: "green" },
-    { label: "有效节点", value: data?.counts.nodes ?? "—", note: "已标准化", color: "blue" },
-    { label: "有效订阅", value: data?.counts.subscriptions ?? "—", note: "令牌保护", color: "purple" },
+    { label: "启用数据源", value: data?.counts.sources ?? "—", note: "持续同步", color: "green", index: "01" },
+    { label: "有效节点", value: data?.counts.nodes ?? "—", note: "已标准化", color: "blue", index: "02" },
+    { label: "有效订阅", value: data?.counts.subscriptions ?? "—", note: "令牌保护", color: "purple", index: "03" },
   ];
   return <div className="page-grid">
     <section className="hero-card"><div><p className="eyebrow">系统状态</p><h2>你的配置，运行在边缘。</h2><p>从导入、解析到分发，所有数据都留在你的 Cloudflare 账户中。</p></div><div className="orbit"><span>C</span></div></section>
-    <section className="stats">{cards.map((card) => <article className="stat-card" key={card.label}><span className={"stat-dot " + card.color} /><p>{card.label}</p><strong>{card.value}</strong><small>{card.note}</small></article>)}</section>
+    <section className="stats">{cards.map((card) => <article className="stat-card" key={card.label} data-index={card.index}><span className={"stat-dot " + card.color} /><p>{card.label}</p><strong>{card.value}</strong><small>{card.note}</small></article>)}</section>
     <section className="panel span-two"><div className="panel-head"><div><p className="eyebrow">运行摘要</p><h3>最近状态</h3></div><span className="status-pill good">自动刷新已启用</span></div>
       <div className="summary-row"><span>最近订阅访问</span><strong>{formatTime(data?.lastSubscriptionAccess)}</strong></div>
       <div className="summary-row"><span>定时刷新</span><strong>每 30 分钟 · UTC</strong></div>
