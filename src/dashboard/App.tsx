@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 import { api, ApiError } from "./api";
+import { copyText } from "./clipboard";
 
 type Notice = { tone: "success" | "error"; text: string } | null;
 
@@ -268,10 +269,17 @@ function SubscriptionsPage() {
     const result = await api<{ token: string }>("/api/subscriptions/" + item.id + "/rotate-token", { method: "POST" }); setTokenUrl(window.location.origin + "/sub/" + result.token); setNotice({ tone: "success", text: "令牌已轮换，请立即保存新地址。" }); await load();
   }
   async function showPreview(item: Subscription) { setPreview(await api<{ body: string; nodeCount: number }>("/api/subscriptions/" + item.id + "/preview", { method: "POST", body: { target: item.default_target } })); }
+  async function copyTokenUrl() {
+    const copied = await copyText(tokenUrl);
+    setNotice({
+      tone: copied ? "success" : "error",
+      text: copied ? "订阅地址已复制" : "复制失败，请手动选择地址",
+    });
+  }
   return <section className="panel page-panel">
     <div className="panel-head"><div><p className="eyebrow">Tokenized delivery</p><h2>订阅</h2><p className="muted">组合多个数据源，通过不可猜测令牌安全分发。</p></div><button className="button primary" onClick={() => setShowForm(!showForm)}>{showForm ? "取消" : "+ 创建订阅"}</button></div>
     <NoticeBar notice={notice} onClose={() => setNotice(null)} />
-    {tokenUrl && <div className="token-reveal"><div><p className="eyebrow">仅显示一次</p><strong>{tokenUrl}</strong></div><button className="button primary" onClick={() => void navigator.clipboard.writeText(tokenUrl)}>复制地址</button></div>}
+    {tokenUrl && <div className="token-reveal"><div><p className="eyebrow">仅显示一次</p><strong>{tokenUrl}</strong></div><button className="button primary" onClick={() => void copyTokenUrl()}>复制地址</button></div>}
     {showForm && <form className="form-card" onSubmit={create}><div className="form-grid"><label>名称<input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="例如：日常设备" required /></label><label>默认格式<select value={form.defaultTarget} onChange={(event) => setForm({ ...form, defaultTarget: event.target.value })}><option value="mihomo">Mihomo YAML</option><option value="raw">Raw Base64</option><option value="json">内部 JSON</option></select></label></div><fieldset><legend>包含的数据源</legend><div className="check-grid">{sources.map((source) => <label className="check" key={source.id}><input type="checkbox" checked={form.sourceIds.includes(source.id)} onChange={(event) => setForm({ ...form, sourceIds: event.target.checked ? [...form.sourceIds, source.id] : form.sourceIds.filter((id) => id !== source.id) })} />{source.name}</label>)}</div></fieldset><div className="form-actions"><span className="muted">创建后可继续配置过滤、重命名与排序规则。</span><button className="button primary" disabled={!form.sourceIds.length}>创建并生成令牌</button></div></form>}
     <div className="card-list">{items.map((item) => <article className="subscription-card" key={item.id}><div className="sub-icon">⌁</div><div className="sub-copy"><div><h3>{item.name}</h3><span className={"status-pill " + (item.enabled ? "good" : "neutral")}>{item.enabled ? "运行中" : "已暂停"}</span></div><p><span className="protocol">{item.default_target}</span> · {item.sourceIds.length} 个数据源 · 令牌 {item.token_prefix ?? "—"}••••</p><small>最近访问：{formatTime(item.last_access_at)}</small></div><div className="actions"><button className="button ghost small" onClick={() => void showPreview(item)}>预览</button><button className="button ghost small" onClick={() => void rotate(item)}>轮换令牌</button></div></article>)}{!items.length && <div className="empty">还没有订阅。选择数据源后创建第一条。</div>}</div>
     {preview && <div className="modal-backdrop" onClick={() => setPreview(undefined)}><div className="modal" onClick={(event) => event.stopPropagation()}><div className="panel-head"><div><p className="eyebrow">输出预览</p><h3>{preview.nodeCount} 个节点</h3></div><button className="icon-button" onClick={() => setPreview(undefined)}>×</button></div><pre>{preview.body}</pre></div></div>}
