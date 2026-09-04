@@ -1,5 +1,7 @@
 export type SubscriptionTarget = "raw" | "mihomo" | "singbox" | "json";
 
+export type SourceKind = "subscription" | "standalone";
+
 export interface NormalizedNode {
   id?: string;
   sourceId?: string;

@@ -21,6 +21,7 @@ interface Source {
   id: string;
   name: string;
   type: "url" | "manual";
+  source_kind: "subscription" | "standalone";
   url: string | null;
   enabled: number;
   node_count: number;
@@ -36,6 +37,7 @@ interface NodeItem {
   server: string;
   port: number;
   source_name: string;
+  source_kind: "subscription" | "standalone";
   enabled: number;
   tags: string[];
 }
@@ -192,15 +194,17 @@ function SourcesPage() {
   const [showForm, setShowForm] = useState(false);
   const [notice, setNotice] = useState<Notice>(null);
   const [busyId, setBusyId] = useState<string>();
-  const [form, setForm] = useState({ name: "", type: "url" as "url" | "manual", url: "", content: "", refreshInterval: 60 });
+  const [form, setForm] = useState({ name: "", kind: "url" as "url" | "manual" | "standalone", url: "", content: "", refreshInterval: 60 });
   const load = useCallback(async () => { const result = await api<{ items: Source[] }>("/api/sources?pageSize=100"); setItems(result.items); }, []);
   useEffect(() => { void load(); }, [load]);
   async function create(event: FormEvent) {
     event.preventDefault(); setNotice(null);
+    const type = form.kind === "url" ? "url" : "manual";
+    const sourceKind = form.kind === "standalone" ? "standalone" : "subscription";
     try {
-      const result = await api<{ refreshError?: string }>("/api/sources", { method: "POST", body: { ...form, timeoutMs: 15000, enabled: true } });
-      setNotice({ tone: result.refreshError ? "error" : "success", text: result.refreshError ?? "数据源已创建并完成解析" });
-      setForm({ name: "", type: "url", url: "", content: "", refreshInterval: 60 }); setShowForm(false); await load();
+      const result = await api<{ refreshError?: string }>("/api/sources", { method: "POST", body: { ...form, type, sourceKind, timeoutMs: 15000, enabled: true } });
+      setNotice({ tone: result.refreshError ? "error" : "success", text: result.refreshError ?? (sourceKind === "standalone" ? "节点已添加" : "数据源已创建并完成解析") });
+      setForm({ name: "", kind: "url", url: "", content: "", refreshInterval: 60 }); setShowForm(false); await load();
     } catch (error) { setNotice({ tone: "error", text: error instanceof Error ? error.message : "创建失败" }); }
   }
   async function refresh(id: string) {
@@ -217,15 +221,23 @@ function SourcesPage() {
     <div className="panel-head"><div><p className="eyebrow">Upstream registry</p><h2>数据源</h2><p className="muted">导入你拥有或已获授权的 HTTPS 订阅与手动配置。</p></div><button className="button primary" onClick={() => setShowForm(!showForm)}>{showForm ? "取消" : "+ 添加数据源"}</button></div>
     <NoticeBar notice={notice} onClose={() => setNotice(null)} />
     {showForm && <form className="form-card" onSubmit={create}>
-      <div className="form-grid"><label>名称<input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="例如：主订阅" required /></label><label>类型<select value={form.type} onChange={(event) => setForm({ ...form, type: event.target.value as "url" | "manual" })}><option value="url">HTTPS URL</option><option value="manual">手动配置</option></select></label></div>
-      {form.type === "url" ? <label>上游地址<input type="url" value={form.url} onChange={(event) => setForm({ ...form, url: event.target.value })} placeholder="https://example.com/subscription" required /></label> : <label>配置内容<textarea rows={8} value={form.content} onChange={(event) => setForm({ ...form, content: event.target.value })} placeholder="粘贴 Clash YAML、URI 列表或内部 JSON" required /></label>}
-      <div className="form-actions"><label className="compact">刷新周期（分钟）<input type="number" min={5} value={form.refreshInterval} onChange={(event) => setForm({ ...form, refreshInterval: Number(event.target.value) })} /></label><button className="button primary">保存并解析</button></div>
+      <div className="form-grid"><label>名称<input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="例如：主订阅" required /></label><label>类型<select value={form.kind} onChange={(event) => setForm({ ...form, kind: event.target.value as "url" | "manual" | "standalone" })}><option value="url">订阅链接（HTTPS URL）</option><option value="manual">手动配置</option><option value="standalone">单节点链接</option></select></label></div>
+      {form.kind === "url" ? <label>上游地址<input type="url" value={form.url} onChange={(event) => setForm({ ...form, url: event.target.value })} placeholder="https://example.com/subscription" required /></label> : <label>配置内容<textarea rows={form.kind === "standalone" ? 4 : 8} value={form.content} onChange={(event) => setForm({ ...form, content: event.target.value })} placeholder={form.kind === "standalone" ? "粘贴单个节点链接（ss:// vmess:// vless:// trojan:// hysteria2:// tuic://）" : "粘贴 Clash YAML、URI 列表或内部 JSON"} required /></label>}
+      <div className="form-actions"><label className="compact">刷新周期（分钟）<input type="number" min={5} value={form.refreshInterval} onChange={(event) => setForm({ ...form, refreshInterval: Number(event.target.value) })} /></label><button className="button primary">{form.kind === "standalone" ? "添加节点" : "保存并解析"}</button></div>
     </form>}
     <div className="table-wrap"><table><thead><tr><th>数据源</th><th>类型</th><th>节点</th><th>最近成功</th><th>状态</th><th /></tr></thead><tbody>
-      {items.map((item) => <tr key={item.id}><td><strong>{item.name}</strong><small>{item.url ?? "手动内容 · 已加密"}</small></td><td><span className="protocol">{item.type}</span></td><td>{item.node_count ?? 0}</td><td>{formatTime(item.last_success_at)}</td><td>{item.last_error ? <span className="status-pill bad" title={item.last_error}>异常</span> : <span className="status-pill good">正常</span>}</td><td className="actions"><button className="button ghost small" disabled={busyId === item.id} onClick={() => void refresh(item.id)}>{busyId === item.id ? "刷新中" : "刷新"}</button><button className="button danger small" onClick={() => void remove(item.id)}>删除</button></td></tr>)}
+      {items.map((item) => <tr key={item.id}><td><strong>{item.name}</strong><small>{item.type === "url" ? item.url : item.source_kind === "standalone" ? "单节点链接 · 已加密" : "手动内容 · 已加密"}</small></td><td><span className="protocol">{item.source_kind === "standalone" ? "单节点" : "订阅源"}</span></td><td>{item.node_count ?? 0}</td><td>{formatTime(item.last_success_at)}</td><td>{item.last_error ? <span className="status-pill bad" title={item.last_error}>异常</span> : <span className="status-pill good">正常</span>}</td><td className="actions"><button className="button ghost small" disabled={busyId === item.id} onClick={() => void refresh(item.id)}>{busyId === item.id ? "刷新中" : "刷新"}</button><button className="button danger small" onClick={() => void remove(item.id)}>删除</button></td></tr>)}
       {!items.length && <tr><td colSpan={6}><div className="empty">还没有数据源。添加第一个上游或手动配置开始。</div></td></tr>}
     </tbody></table></div>
   </section>;
+}
+
+function NodeTable({ items, onToggle }: { items: NodeItem[]; onToggle: (item: NodeItem) => void }) {
+  return <div className="table-wrap"><table><thead><tr><th>名称</th><th>协议</th><th>服务器</th><th>来源</th><th>启用</th></tr></thead><tbody>{items.map((item) => <tr key={item.id}><td><strong>{item.name}</strong>{item.tags.length > 0 && <small>{item.tags.join(" · ")}</small>}</td><td><span className="protocol">{item.protocol}</span></td><td className="mono">{item.server}:{item.port}</td><td>{item.source_name}</td><td><button className={"switch " + (item.enabled ? "on" : "")} onClick={() => onToggle(item)}><span /></button></td></tr>)}</tbody></table></div>;
+}
+
+function NodeGroup({ title, items, onToggle, empty }: { title: string; items: NodeItem[]; onToggle: (item: NodeItem) => void; empty: string }) {
+  return <div className="node-group"><div className="node-group-head"><h3>{title}</h3><span className="status-pill neutral">{items.length} 个节点</span></div>{items.length ? <NodeTable items={items} onToggle={onToggle} /> : <div className="empty">{empty}</div>}</div>;
 }
 
 function NodesPage() {
@@ -239,11 +251,14 @@ function NodesPage() {
     try { await api("/api/nodes/" + item.id, { method: "PUT", body: { enabled: !item.enabled } }); await load(); }
     catch (error) { setNotice({ tone: "error", text: error instanceof Error ? error.message : "更新失败" }); }
   }
+  const subscriptionNodes = items.filter((item) => item.source_kind !== "standalone");
+  const standaloneNodes = items.filter((item) => item.source_kind === "standalone");
   return <section className="panel page-panel">
     <div className="panel-head"><div><p className="eyebrow">Normalized inventory</p><h2>节点</h2><p className="muted">敏感字段默认脱敏；禁用状态会在上游刷新后保留。</p></div><span className="status-pill neutral">{items.length} 条当前结果</span></div>
     <NoticeBar notice={notice} onClose={() => setNotice(null)} />
     <div className="filters"><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索节点名称" /><select value={protocol} onChange={(event) => setProtocol(event.target.value)}><option value="">全部协议</option>{["ss", "vmess", "vless", "trojan", "hysteria2", "tuic"].map((value) => <option key={value}>{value}</option>)}</select></div>
-    <div className="table-wrap"><table><thead><tr><th>名称</th><th>协议</th><th>服务器</th><th>来源</th><th>启用</th></tr></thead><tbody>{items.map((item) => <tr key={item.id}><td><strong>{item.name}</strong>{item.tags.length > 0 && <small>{item.tags.join(" · ")}</small>}</td><td><span className="protocol">{item.protocol}</span></td><td className="mono">{item.server}:{item.port}</td><td>{item.source_name}</td><td><button className={"switch " + (item.enabled ? "on" : "")} onClick={() => void toggle(item)}><span /></button></td></tr>)}{!items.length && <tr><td colSpan={5}><div className="empty">没有匹配的节点。先刷新一个数据源。</div></td></tr>}</tbody></table></div>
+    <NodeGroup title="订阅节点" items={subscriptionNodes} onToggle={toggle} empty="还没有订阅节点。添加订阅源并刷新后，节点会显示在这里。" />
+    <NodeGroup title="单独节点" items={standaloneNodes} onToggle={toggle} empty="还没有单独节点。通过“单节点链接”添加一个节点。" />
   </section>;
 }
 

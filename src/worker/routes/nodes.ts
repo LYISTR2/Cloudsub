@@ -22,14 +22,14 @@ export function registerNodeRoutes(app: Hono<AppBindings>): void {
     if (sourceId) { conditions.push("n.source_id = ?"); parameters.push(sourceId); }
     const where = conditions.join(" AND ");
     const [items, total] = await Promise.all([
-      context.env.DB.prepare("SELECT n.id, n.source_id, s.name AS source_name, n.name, n.protocol, n.server, n.port, n.tags_json, n.enabled, n.updated_at FROM nodes n JOIN sources s ON s.id = n.source_id WHERE " + where + " ORDER BY n.name COLLATE NOCASE LIMIT ? OFFSET ?").bind(...parameters, pageSize, offset).all<any>(),
+      context.env.DB.prepare("SELECT n.id, n.source_id, s.name AS source_name, s.source_kind, n.name, n.protocol, n.server, n.port, n.tags_json, n.enabled, n.updated_at FROM nodes n JOIN sources s ON s.id = n.source_id WHERE " + where + " ORDER BY n.name COLLATE NOCASE LIMIT ? OFFSET ?").bind(...parameters, pageSize, offset).all<any>(),
       context.env.DB.prepare("SELECT COUNT(*) AS count FROM nodes n WHERE " + where).bind(...parameters).first<{ count: number }>(),
     ]);
     return context.json({ data: { items: items.results.map((item) => ({ ...item, server: maskServer(item.server), tags: JSON.parse(item.tags_json), tags_json: undefined })), page, pageSize, total: total?.count ?? 0 } });
   });
 
   app.get("/api/nodes/:id", async (context) => {
-    const node = await context.env.DB.prepare("SELECT n.id, n.source_id, s.name AS source_name, n.name, n.protocol, n.server, n.port, n.tags_json, n.enabled, n.created_at, n.updated_at FROM nodes n JOIN sources s ON s.id = n.source_id WHERE n.id = ? AND n.present = 1").bind(context.req.param("id")).first<any>();
+    const node = await context.env.DB.prepare("SELECT n.id, n.source_id, s.name AS source_name, s.source_kind, n.name, n.protocol, n.server, n.port, n.tags_json, n.enabled, n.created_at, n.updated_at FROM nodes n JOIN sources s ON s.id = n.source_id WHERE n.id = ? AND n.present = 1").bind(context.req.param("id")).first<any>();
     if (!node) throw new AppError(404, "节点不存在", "node_not_found");
     return context.json({ data: { ...node, server: maskServer(node.server), tags: JSON.parse(node.tags_json), tags_json: undefined } });
   });

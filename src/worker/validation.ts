@@ -23,6 +23,7 @@ export const passwordSchema = z.object({
 export const sourceCreateSchema = z.object({
   name: z.string().trim().min(1).max(100),
   type: z.enum(["url", "manual"]),
+  sourceKind: z.enum(["subscription", "standalone"]).default("subscription"),
   url: z.string().trim().max(2_000).optional(),
   content: z.string().max(5_300_000).optional(),
   headers: z.record(z.string(), z.string().max(2_000)).optional(),
@@ -32,7 +33,8 @@ export const sourceCreateSchema = z.object({
   timeoutMs: z.number().int().min(1_000).max(30_000).default(15_000),
 });
 
-export const sourceUpdateSchema = sourceCreateSchema.partial().omit({ type: true });
+// source_kind is decided at creation time and cannot be changed afterwards.
+export const sourceUpdateSchema = sourceCreateSchema.partial().omit({ type: true, sourceKind: true });
 
 export const nodeUpdateSchema = z.object({
   name: z.string().trim().min(1).max(200).optional(),

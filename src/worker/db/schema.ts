@@ -34,6 +34,7 @@ export const sources = sqliteTable(
     id: text("id").primaryKey(),
     name: text("name").notNull(),
     type: text("type", { enum: ["url", "manual"] }).notNull(),
+    sourceKind: text("source_kind", { enum: ["subscription", "standalone"] }).notNull().default("subscription"),
     url: text("url"),
     payloadEncrypted: text("payload_encrypted"),
     userAgent: text("user_agent"),
@@ -48,7 +49,10 @@ export const sources = sqliteTable(
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
   },
-  (table) => [index("idx_sources_next_refresh_at").on(table.enabled, table.nextRefreshAt)],
+  (table) => [
+    index("idx_sources_next_refresh_at").on(table.enabled, table.nextRefreshAt),
+    index("idx_sources_source_kind").on(table.sourceKind),
+  ],
 );
 
 export const sourceFetchLogs = sqliteTable(

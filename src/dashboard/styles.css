@@ -216,6 +216,11 @@ legend { color: #93a58c; font-size: 10px; font-weight: 600; padding: 0 6px; lett
 .check input { width: auto; accent-color: var(--accent); }
 .filters { display: grid; grid-template-columns: minmax(240px, 1fr) 190px; gap: 10px; margin-bottom: 16px; }
 
+.node-group { margin-top: 20px; border-top: 1px solid var(--line); padding-top: 14px; }
+.node-group-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 12px; }
+.node-group-head h3 { margin: 0; font-size: 13px; font-weight: 600; letter-spacing: .04em; }
+.node-group-head h3::before { content: "» "; color: var(--accent); }
+
 .table-wrap { overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; font-size: 12px; }
 th { color: #566552; font-size: 9px; text-transform: uppercase; letter-spacing: .12em; text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line-strong); }
