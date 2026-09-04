@@ -39,6 +39,30 @@ describe("subscription input adapters", () => {
     expect(nodes[0].config).toMatchObject({ network: "ws", tls: true });
   });
 
+  it("parses AnyTLS URIs with default TLS and full options", async () => {
+    const uri = "anytls://secret-pass@edge.example.com:8443?sni=edge.example.com&alpn=h2,http/1.1&allowInsecure=1&client-fingerprint=chrome&idle-session-check-interval=30s&idle-session-timeout=60s&min-idle-session=2#Tokyo";
+    const nodes = await parseSubscriptionContent(uri);
+    expect(nodes).toHaveLength(1);
+    expect(nodes[0]).toMatchObject({ name: "Tokyo", protocol: "anytls", server: "edge.example.com", port: 8443 });
+    expect(nodes[0].config).toMatchObject({
+      type: "anytls",
+      password: "secret-pass",
+      tls: true,
+      sni: "edge.example.com",
+      alpn: ["h2", "http/1.1"],
+      "skip-cert-verify": true,
+      "client-fingerprint": "chrome",
+      "idle-session-check-interval": "30s",
+      "idle-session-timeout": "60s",
+      "min-idle-session": 2,
+    });
+  });
+
+  it("accepts the insecure alias for AnyTLS URIs", async () => {
+    const nodes = await parseSubscriptionContent("anytls://secret-pass@edge.example.com:443?insecure=1#Node");
+    expect(nodes[0].config).toMatchObject({ "skip-cert-verify": true, tls: true });
+  });
+
   it("rejects excessively deep structured input", async () => {
     let value: unknown = { name: "leaf" };
     for (let index = 0; index < 40; index += 1) value = { child: value };

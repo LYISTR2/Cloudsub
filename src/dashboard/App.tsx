@@ -222,7 +222,7 @@ function SourcesPage() {
     <NoticeBar notice={notice} onClose={() => setNotice(null)} />
     {showForm && <form className="form-card" onSubmit={create}>
       <div className="form-grid"><label>名称<input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="例如：主订阅" required /></label><label>类型<select value={form.kind} onChange={(event) => setForm({ ...form, kind: event.target.value as "url" | "manual" | "standalone" })}><option value="url">订阅链接（HTTPS URL）</option><option value="manual">手动配置</option><option value="standalone">单节点链接</option></select></label></div>
-      {form.kind === "url" ? <label>上游地址<input type="url" value={form.url} onChange={(event) => setForm({ ...form, url: event.target.value })} placeholder="https://example.com/subscription" required /></label> : <label>配置内容<textarea rows={form.kind === "standalone" ? 4 : 8} value={form.content} onChange={(event) => setForm({ ...form, content: event.target.value })} placeholder={form.kind === "standalone" ? "粘贴单个节点链接（ss:// vmess:// vless:// trojan:// hysteria2:// tuic://）" : "粘贴 Clash YAML、URI 列表或内部 JSON"} required /></label>}
+      {form.kind === "url" ? <label>上游地址<input type="url" value={form.url} onChange={(event) => setForm({ ...form, url: event.target.value })} placeholder="https://example.com/subscription" required /></label> : <label>配置内容<textarea rows={form.kind === "standalone" ? 4 : 8} value={form.content} onChange={(event) => setForm({ ...form, content: event.target.value })} placeholder={form.kind === "standalone" ? "粘贴单个节点链接（ss:// vmess:// vless:// trojan:// hysteria2:// tuic:// anytls://）" : "粘贴 Clash YAML、URI 列表或内部 JSON"} required /></label>}
       <div className="form-actions"><label className="compact">刷新周期（分钟）<input type="number" min={5} value={form.refreshInterval} onChange={(event) => setForm({ ...form, refreshInterval: Number(event.target.value) })} /></label><button className="button primary">{form.kind === "standalone" ? "添加节点" : "保存并解析"}</button></div>
     </form>}
     <div className="table-wrap"><table><thead><tr><th>数据源</th><th>类型</th><th>节点</th><th>最近成功</th><th>状态</th><th /></tr></thead><tbody>
@@ -256,7 +256,7 @@ function NodesPage() {
   return <section className="panel page-panel">
     <div className="panel-head"><div><p className="eyebrow">Normalized inventory</p><h2>节点</h2><p className="muted">敏感字段默认脱敏；禁用状态会在上游刷新后保留。</p></div><span className="status-pill neutral">{items.length} 条当前结果</span></div>
     <NoticeBar notice={notice} onClose={() => setNotice(null)} />
-    <div className="filters"><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索节点名称" /><select value={protocol} onChange={(event) => setProtocol(event.target.value)}><option value="">全部协议</option>{["ss", "vmess", "vless", "trojan", "hysteria2", "tuic"].map((value) => <option key={value}>{value}</option>)}</select></div>
+    <div className="filters"><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索节点名称" /><select value={protocol} onChange={(event) => setProtocol(event.target.value)}><option value="">全部协议</option>{["ss", "vmess", "vless", "trojan", "hysteria2", "tuic", "anytls"].map((value) => <option key={value}>{value}</option>)}</select></div>
     <NodeGroup title="订阅节点" items={subscriptionNodes} onToggle={toggle} empty="还没有订阅节点。添加订阅源并刷新后，节点会显示在这里。" />
     <NodeGroup title="单独节点" items={standaloneNodes} onToggle={toggle} empty="还没有单独节点。通过“单节点链接”添加一个节点。" />
   </section>;

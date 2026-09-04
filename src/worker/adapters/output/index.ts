@@ -79,7 +79,7 @@ function uriForNode(node: NormalizedNode): string | undefined {
   if (typeof credential !== "string") return undefined;
 
   const query = new URLSearchParams();
-  if (config.tls) query.set("security", "tls");
+  if (config.tls && node.protocol !== "anytls") query.set("security", "tls");
   if (typeof config.sni === "string") query.set("sni", config.sni);
   if (typeof config.network === "string" && config.network !== "tcp") query.set("type", config.network);
   if (typeof config.flow === "string") query.set("flow", config.flow);
@@ -106,6 +106,13 @@ function uriForNode(node: NormalizedNode): string | undefined {
   }
 
   const password = node.protocol === "tuic" && typeof config.password === "string" ? ":" + encodeURIComponent(config.password) : "";
+  // AnyTLS specific parameters
+  if (node.protocol === "anytls") {
+    if (typeof config["client-fingerprint"] === "string") query.set("client-fingerprint", config["client-fingerprint"]);
+    if (typeof config["idle-session-check-interval"] === "string") query.set("idle-session-check-interval", config["idle-session-check-interval"]);
+    if (typeof config["idle-session-timeout"] === "string") query.set("idle-session-timeout", config["idle-session-timeout"]);
+    if (typeof config["min-idle-session"] === "number") query.set("min-idle-session", String(config["min-idle-session"]));
+  }
   return node.protocol + "://" + encodeURIComponent(credential) + password + "@" + node.server + ":" + node.port + (query.size ? "?" + query.toString() : "") + "#" + name;
 }
 
@@ -187,6 +194,12 @@ function buildSingboxConfig(nodes: NormalizedNode[]): Record<string, unknown> {
       outbound.uuid = config.uuid;
       outbound.password = config.password;
       if (config["congestion-controller"]) outbound.congestion_control = config["congestion-controller"];
+    } else if (node.protocol === "anytls") {
+      outbound.type = "anytls";
+      outbound.password = config.password;
+      if (config["idle-session-check-interval"]) outbound.idle_session_check_interval = config["idle-session-check-interval"];
+      if (config["idle-session-timeout"]) outbound.idle_session_timeout = config["idle-session-timeout"];
+      if (typeof config["min-idle-session"] === "number") outbound.min_idle_session = config["min-idle-session"];
     } else {
       continue;
     }
@@ -198,6 +211,9 @@ function buildSingboxConfig(nodes: NormalizedNode[]): Record<string, unknown> {
         insecure: Boolean(config["skip-cert-verify"]),
         alpn: Array.isArray(config.alpn) ? config.alpn : undefined,
       };
+      if (node.protocol === "anytls" && typeof config["client-fingerprint"] === "string") {
+        (outbound.tls as Record<string, unknown>).utls = { enabled: true, fingerprint: config["client-fingerprint"] };
+      }
     }
     if (config.network === "ws" && config["ws-opts"]) {
       const wsOpts = config["ws-opts"] as Record<string, unknown>;

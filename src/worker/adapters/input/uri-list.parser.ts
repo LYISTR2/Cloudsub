@@ -81,7 +81,7 @@ async function parseUrlNode(uri: string): Promise<NormalizedNode | undefined> {
   let url: URL;
   try { url = new URL(uri); } catch { return undefined; }
   const protocol = url.protocol.slice(0, -1).toLowerCase();
-  if (!["vless", "trojan", "hysteria2", "hy2", "tuic"].includes(protocol)) return undefined;
+  if (!["vless", "trojan", "hysteria2", "hy2", "tuic", "anytls"].includes(protocol)) return undefined;
   const port = validPort(url.port);
   if (!url.hostname || !port) return undefined;
   const normalizedProtocol = protocol === "hy2" ? "hysteria2" : protocol;
@@ -90,13 +90,13 @@ async function parseUrlNode(uri: string): Promise<NormalizedNode | undefined> {
   const username = decodeURIComponent(url.username);
   const password = decodeURIComponent(url.password);
   if (normalizedProtocol === "vless") config.uuid = username;
-  if (normalizedProtocol === "trojan" || normalizedProtocol === "hysteria2") config.password = username || password;
+  if (normalizedProtocol === "trojan" || normalizedProtocol === "hysteria2" || normalizedProtocol === "anytls") config.password = username || password;
   if (normalizedProtocol === "tuic") {
     config.uuid = username;
     config.password = password;
   }
   const query = url.searchParams;
-  if (query.get("security") === "tls" || normalizedProtocol === "trojan" || normalizedProtocol === "hysteria2") config.tls = true;
+  if (query.get("security") === "tls" || normalizedProtocol === "trojan" || normalizedProtocol === "hysteria2" || normalizedProtocol === "anytls") config.tls = true;
   if (query.get("sni")) config.sni = query.get("sni");
   if (query.get("type") && query.get("type") !== "tcp") config.network = query.get("type");
   if (query.get("flow")) config.flow = query.get("flow");
@@ -113,6 +113,15 @@ async function parseUrlNode(uri: string): Promise<NormalizedNode | undefined> {
   // TUIC congestion control
   if (normalizedProtocol === "tuic") {
     if (query.get("congestion_control")) config["congestion-controller"] = query.get("congestion_control");
+  }
+  // AnyTLS options
+  if (normalizedProtocol === "anytls") {
+    if (query.get("allowInsecure") === "1" || query.get("insecure") === "1") config["skip-cert-verify"] = true;
+    if (query.get("client-fingerprint")) config["client-fingerprint"] = query.get("client-fingerprint");
+    if (query.get("idle-session-check-interval")) config["idle-session-check-interval"] = query.get("idle-session-check-interval");
+    if (query.get("idle-session-timeout")) config["idle-session-timeout"] = query.get("idle-session-timeout");
+    const minIdleSession = Number(query.get("min-idle-session"));
+    if (Number.isInteger(minIdleSession) && minIdleSession > 0) config["min-idle-session"] = minIdleSession;
   }
   return completeNode({ name, protocol: normalizedProtocol, server: url.hostname, port, config, rawUri: uri });
 }

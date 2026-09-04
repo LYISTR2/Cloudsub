@@ -26,6 +26,7 @@
 | Trojan | ✅ | ✅ | ✅ |
 | Hysteria2 | ✅ | ✅ | ✅ |
 | TUIC | ✅ | ✅ | ✅ |
+| AnyTLS | ✅ | ✅ | ✅ |
 
 ## 支持的输出格式
 
@@ -162,7 +163,7 @@ src/
 │   ├── adapters/
 │   │   ├── input/            # 输入解析器
 │   │   │   ├── index.ts      #   格式自动探测
-│   │   │   ├── uri-list.parser.ts  # ss/vmess/vless/trojan/hy2/tuic URI
+│   │   │   ├── uri-list.parser.ts  # ss/vmess/vless/trojan/hy2/tuic/anytls URI
 │   │   │   ├── clash.parser.ts     # Clash YAML
 │   │   │   ├── internal-json.parser.ts
 │   │   │   └── shared.ts     #   base64 / fingerprint / port

@@ -61,4 +61,51 @@ describe("subscription rules and renderers", () => {
     expect(decoded).toContain("obfs=salamander");
     expect(decoded).toContain("obfs-password=obfspass");
   });
+
+  it("renders AnyTLS raw URIs preserving full options", () => {
+    const testNodes: NormalizedNode[] = [
+      { name: "AnyTLS Node", protocol: "anytls", server: "any.example.com", port: 443, config: { type: "anytls", password: "pass123", tls: true, sni: "any.example.com", alpn: ["h2", "http/1.1"], "skip-cert-verify": true, "client-fingerprint": "chrome", "idle-session-check-interval": "30s", "idle-session-timeout": "60s", "min-idle-session": 2 }, tags: [], enabled: true, fingerprint: "at1" },
+    ];
+    const body = renderSubscription(testNodes, "raw").body;
+    const decoded = decodeBase64Text(body);
+    expect(decoded).toContain("anytls://pass123@any.example.com:443");
+    expect(decoded).not.toContain("security=");
+    expect(decoded).toContain("sni=any.example.com");
+    expect(decoded).toContain("alpn=h2%2Chttp%2F1.1");
+    expect(decoded).toContain("allowInsecure=1");
+    expect(decoded).toContain("client-fingerprint=chrome");
+    expect(decoded).toContain("idle-session-check-interval=30s");
+    expect(decoded).toContain("idle-session-timeout=60s");
+    expect(decoded).toContain("min-idle-session=2");
+  });
+
+  it("renders AnyTLS proxies in Mihomo YAML", () => {
+    const testNodes: NormalizedNode[] = [
+      { name: "AnyTLS Node", protocol: "anytls", server: "any.example.com", port: 443, config: { type: "anytls", password: "pass123", tls: true, sni: "any.example.com", alpn: ["h2", "http/1.1"], "skip-cert-verify": true, "client-fingerprint": "chrome", "idle-session-check-interval": "30s", "idle-session-timeout": "60s", "min-idle-session": 2 }, tags: [], enabled: true, fingerprint: "at1" },
+    ];
+    const body = renderSubscription(testNodes, "mihomo").body;
+    expect(body).toContain("type: anytls");
+    expect(body).toContain("password: pass123");
+    expect(body).toContain("client-fingerprint: chrome");
+    expect(body).toContain("min-idle-session: 2");
+  });
+
+  it("renders AnyTLS outbounds in Sing-box JSON", () => {
+    const testNodes: NormalizedNode[] = [
+      { name: "AnyTLS Node", protocol: "anytls", server: "any.example.com", port: 443, config: { type: "anytls", password: "pass123", tls: true, sni: "any.example.com", alpn: ["h2", "http/1.1"], "skip-cert-verify": true, "client-fingerprint": "chrome", "idle-session-check-interval": "30s", "idle-session-timeout": "60s", "min-idle-session": 2 }, tags: [], enabled: true, fingerprint: "at1" },
+    ];
+    const body = renderSubscription(testNodes, "singbox").body;
+    const parsed = JSON.parse(body);
+    const outbound = parsed.outbounds.find((o: Record<string, unknown>) => o.type === "anytls");
+    expect(outbound).toBeDefined();
+    expect(outbound).toMatchObject({
+      password: "pass123",
+      server: "any.example.com",
+      server_port: 443,
+      idle_session_check_interval: "30s",
+      idle_session_timeout: "60s",
+      min_idle_session: 2,
+      tls: { enabled: true, server_name: "any.example.com", insecure: true, alpn: ["h2", "http/1.1"], utls: { enabled: true, fingerprint: "chrome" } },
+    });
+  });
 });
