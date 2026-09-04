@@ -75,5 +75,17 @@ describe("CloudSub API lifecycle", () => {
     const invalid = await workerRequest("/sub/not-a-real-token");
     expect(invalid.status).toBe(404);
     expect(await invalid.json()).toMatchObject({ error: { code: "subscription_unavailable" } });
+
+    const subscriptionPayloadWithId = subscriptionPayload as { data: { id: string; token: string } };
+    const deleted = await workerRequest("/api/subscriptions/" + subscriptionPayloadWithId.data.id, {
+      method: "DELETE",
+      headers: { cookie: auth.cookie, "x-csrf-token": auth.csrf },
+    });
+    expect(deleted.status).toBe(200);
+    expect(await deleted.json()).toMatchObject({ data: { ok: true } });
+
+    const deletedToken = await workerRequest("/sub/" + subscriptionPayloadWithId.data.token);
+    expect(deletedToken.status).toBe(404);
+    expect(await deletedToken.json()).toMatchObject({ error: { code: "subscription_unavailable" } });
   });
 });
