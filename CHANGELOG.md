@@ -2,7 +2,32 @@
 
 本项目遵循语义化版本（SemVer）。
 
-## [0.2.0] - 2026-07-26
+## [Unreleased]
+
+### Correctness and Reliability
+
+- **Atomic refresh promotion**: migration `0004_refresh_safety` adds a per-source refresh lease and a staging table. Newly fetched nodes are fully parsed and staged before a single D1 batch promotes them, updates the source, invalidates affected subscription revisions, and records the result. Failed refreshes continue serving the complete last-good node set.
+- **No-op refreshes**: unchanged upstream content only records the check time; it does not rewrite nodes or invalidate subscription output cache.
+- **Distribution invalidation**: deleting a source, editing its content, or enabling/disabling it now invalidates every affected subscription revision atomically. Disabled sources are no longer included in generated or previewed subscriptions.
+- **Strict standalone nodes**: a standalone source accepts exactly one supported URI. Duplicate lines, valid URI plus garbage, and YAML/JSON payloads are rejected.
+- **Output compatibility**: raw output reflects renamed nodes; AnyTLS/TUIC TLS defaults are normalized; generated outputs are validated against Mihomo 1.19.x and sing-box 1.14.x.
+
+### Management Console
+
+- Added server-side pagination with accurate totals for sources, subscriptions, logs, and each node-source group.
+- Split nodes into independently paginated subscription and standalone groups.
+- Added complete subscription editing: enabled state, expiry, output target including Sing-box, source selection, protocol/name filters, safe rename rules, and sorting.
+- Added explicit loading, retry, session-expiry, busy-action, and accessible modal states across management views.
+- One-time subscription URLs stay selectable for manual copying when browser clipboard APIs are unavailable.
+
+### Security
+
+- Subscription name filters and rename rules now use a Workers-compatible linear-time regex engine. It rejects lookarounds, backreferences, and other unsafe constructs before storing rules; see `docs/security.md`.
+
+### Upgrade note
+
+Run `npm run db:migrate:remote` before deploying this release. Migration `0004_refresh_safety` is additive and preserves existing node and subscription records.
+
 
 本次为一次结合上游 GitHub 仓库的优化升级，聚焦「Bug 修复 + 安全加固」「性能与代码质量」「文档与部署体验」三个方向，未改变对外 API 与订阅地址格式，向后兼容。
 

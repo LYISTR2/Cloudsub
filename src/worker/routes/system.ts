@@ -35,7 +35,10 @@ export function registerSystemRoutes(app: Hono<AppBindings>): void {
 
   app.get("/api/audit-logs", async (context) => {
     const { page, pageSize, offset } = pageParams(context);
-    const logs = await context.env.DB.prepare("SELECT l.id, l.action, l.target_type, l.target_id, l.details_json, l.request_id, l.created_at, a.username FROM audit_logs l LEFT JOIN admins a ON a.id = l.admin_id ORDER BY l.created_at DESC LIMIT ? OFFSET ?").bind(pageSize, offset).all<any>();
-    return context.json({ data: { items: logs.results.map((entry) => ({ ...entry, details: JSON.parse(entry.details_json), details_json: undefined })), page, pageSize } });
+    const [logs, total] = await Promise.all([
+      context.env.DB.prepare("SELECT l.id, l.action, l.target_type, l.target_id, l.details_json, l.request_id, l.created_at, a.username FROM audit_logs l LEFT JOIN admins a ON a.id = l.admin_id ORDER BY l.created_at DESC LIMIT ? OFFSET ?").bind(pageSize, offset).all<any>(),
+      context.env.DB.prepare("SELECT COUNT(*) AS count FROM audit_logs").first<{ count: number }>(),
+    ]);
+    return context.json({ data: { items: logs.results.map((entry) => ({ ...entry, details: JSON.parse(entry.details_json), details_json: undefined })), page, pageSize, total: total?.count ?? 0 } });
   });
 }

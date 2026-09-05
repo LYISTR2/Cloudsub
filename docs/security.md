@@ -35,6 +35,18 @@
 
 Worker 为所有响应设置 CSP、`X-Content-Type-Options`、`X-Frame-Options`、Referrer Policy 与 Permissions Policy。管理 API 不发送跨域许可头。所有修改都写入审计日志并附带请求 ID。
 
+## 订阅规则正则
+
+订阅的名称包含、名称排除与重命名规则不使用 JavaScript 的回溯式 `RegExp`。Worker 使用内部的 Thompson NFA/Pike VM 线性时间引擎，匹配复杂度为 `O(模式长度 × 节点名称长度)`，避免不可信规则导致 ReDoS。
+
+支持字面量、`.`、字符类、`\d`/`\w`/`\s`、白名单 Unicode 属性、锚点、分组、替代和量词；模式最长 200 字符，单个量词上限 500。以下构造会在保存规则时被拒绝：反向引用、命名组、lookahead/lookbehind、原子组、内联 flags 和超过上限的重复次数。完整支持范围见 `src/worker/security/regex.ts` 的模块注释。
+
+## 配置输出兼容性
+
+- Mihomo 输出针对 **Mihomo 1.19.x** 校验。
+- Sing-box 输出针对 **sing-box 1.14.x** 校验，避免已删除的 `geoip`、DNS outbound 与旧 DNS server 结构。
+- AnyTLS 在 Mihomo 输出中使用整数秒的 idle-session 字段，在 Sing-box 输出中使用 Go duration 字符串。
+
 ## 报告漏洞
 
 请不要在公开 Issue 中提交真实订阅、访问令牌、密钥或可复现凭据。先创建不含敏感材料的安全问题说明，由维护者提供私密沟通渠道。

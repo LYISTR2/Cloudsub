@@ -1,0 +1,100 @@
+[
+  {
+    "name": "Tokyo 01",
+    "protocol": "vless",
+    "server": "jp.example.com",
+    "port": 443,
+    "config": {
+      "type": "vless",
+      "uuid": "550e8400-e29b-41d4-a716-446655440000",
+      "tls": true,
+      "sni": "jp.example.com",
+      "network": "ws",
+      "ws-opts": { "path": "/ray", "headers": { "Host": "cdn.example.com" } },
+      "skip-cert-verify": false,
+      "alpn": ["h2", "http/1.1"]
+    },
+    "tags": ["premium"],
+    "enabled": true,
+    "fingerprint": "fixture-vless"
+  },
+  {
+    "name": "SS Node",
+    "protocol": "ss",
+    "server": "ss.example.com",
+    "port": 8388,
+    "config": { "type": "ss", "cipher": "aes-128-gcm", "password": "ss-secret", "plugin": "obfs-local;obfs=http" },
+    "tags": [],
+    "enabled": true,
+    "fingerprint": "fixture-ss"
+  },
+  {
+    "name": "VMess WS",
+    "protocol": "vmess",
+    "server": "vm.example.com",
+    "port": 443,
+    "config": {
+      "type": "vmess",
+      "uuid": "550e8400-e29b-41d4-a716-446655440001",
+      "alterId": 0,
+      "cipher": "auto",
+      "tls": true,
+      "network": "ws",
+      "ws-opts": { "path": "/vm", "headers": { "Host": "vm.example.com" } }
+    },
+    "tags": [],
+    "enabled": true,
+    "fingerprint": "fixture-vmess"
+  },
+  {
+    "name": "Trojan Node",
+    "protocol": "trojan",
+    "server": "tr.example.com",
+    "port": 443,
+    "config": { "type": "trojan", "password": "tr-secret", "tls": true, "sni": "tr.example.com" },
+    "tags": [],
+    "enabled": true,
+    "fingerprint": "fixture-trojan"
+  },
+  {
+    "name": "Hy2 Node",
+    "protocol": "hysteria2",
+    "server": "hy2.example.com",
+    "port": 443,
+    "config": { "type": "hysteria2", "password": "hy-secret", "obfs": "salamander", "obfs-password": "obfspass", "up": "100", "down": "200", "tls": true, "sni": "hy2.example.com" },
+    "tags": [],
+    "enabled": true,
+    "fingerprint": "fixture-hy2"
+  },
+  {
+    "name": "TUIC Node",
+    "protocol": "tuic",
+    "server": "tuic.example.com",
+    "port": 443,
+    "config": { "type": "tuic", "uuid": "550e8400-e29b-41d4-a716-446655440002", "password": "tuic-pass", "congestion-controller": "bbr", "tls": true, "sni": "tuic.example.com" },
+    "tags": [],
+    "enabled": true,
+    "fingerprint": "fixture-tuic"
+  },
+  {
+    "name": "AnyTLS Node",
+    "protocol": "anytls",
+    "server": "any.example.com",
+    "port": 443,
+    "config": {
+      "type": "anytls",
+      "password": "anytls-secret",
+      "tls": true,
+      "sni": "any.example.com",
+      "alpn": ["h2", "http/1.1"],
+      "skip-cert-verify": true,
+      "client-fingerprint": "chrome",
+      "idle-session-check-interval": "30s",
+      "idle-session-timeout": "60s",
+      "min-idle-session": 2
+    },
+    "tags": [],
+    "enabled": true,
+    "fingerprint": "fixture-anytls"
+  }
+]

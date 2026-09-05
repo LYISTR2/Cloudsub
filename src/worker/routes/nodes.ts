@@ -14,16 +14,27 @@ export function registerNodeRoutes(app: Hono<AppBindings>): void {
     const query = (context.req.query("q") ?? "").slice(0, 100);
     const protocol = (context.req.query("protocol") ?? "").slice(0, 30);
     const sourceId = (context.req.query("sourceId") ?? "").slice(0, 50);
+    const sourceKind = (context.req.query("sourceKind") ?? "").slice(0, 20);
+    // sourceKind is an enum-valued filter (drives the per-group server-side
+    // pagination in the dashboard); anything else is a client bug and must
+    // be rejected instead of silently ignored.
+    if (sourceKind && sourceKind !== "subscription" && sourceKind !== "standalone") {
+      throw new AppError(422, "sourceKind 参数无效", "invalid_source_kind");
+    }
     if (query) {
       conditions.push("n.name LIKE ? ESCAPE '\\'");
       parameters.push("%" + query.replaceAll("%", "\\%").replaceAll("_", "\\_") + "%");
     }
     if (protocol) { conditions.push("n.protocol = ?"); parameters.push(protocol); }
     if (sourceId) { conditions.push("n.source_id = ?"); parameters.push(sourceId); }
+    if (sourceKind) { conditions.push("s.source_kind = ?"); parameters.push(sourceKind); }
     const where = conditions.join(" AND ");
+    // Both the item query and the COUNT query join sources so the filters
+    // (and totals) stay consistent — the count must never drift from the
+    // filtered item set.
     const [items, total] = await Promise.all([
       context.env.DB.prepare("SELECT n.id, n.source_id, s.name AS source_name, s.source_kind, n.name, n.protocol, n.server, n.port, n.tags_json, n.enabled, n.updated_at FROM nodes n JOIN sources s ON s.id = n.source_id WHERE " + where + " ORDER BY n.name COLLATE NOCASE LIMIT ? OFFSET ?").bind(...parameters, pageSize, offset).all<any>(),
-      context.env.DB.prepare("SELECT COUNT(*) AS count FROM nodes n WHERE " + where).bind(...parameters).first<{ count: number }>(),
+      context.env.DB.prepare("SELECT COUNT(*) AS count FROM nodes n JOIN sources s ON s.id = n.source_id WHERE " + where).bind(...parameters).first<{ count: number }>(),
     ]);
     return context.json({ data: { items: items.results.map((item) => ({ ...item, server: maskServer(item.server), tags: JSON.parse(item.tags_json), tags_json: undefined })), page, pageSize, total: total?.count ?? 0 } });
   });

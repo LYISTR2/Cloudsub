@@ -96,7 +96,9 @@ async function parseUrlNode(uri: string): Promise<NormalizedNode | undefined> {
     config.password = password;
   }
   const query = url.searchParams;
-  if (query.get("security") === "tls" || normalizedProtocol === "trojan" || normalizedProtocol === "hysteria2" || normalizedProtocol === "anytls") config.tls = true;
+  // AnyTLS, trojan, hysteria2 and TUIC are TLS-only transports — `tls` is
+  // implied even when the URI omits `security=tls`.
+  if (query.get("security") === "tls" || normalizedProtocol === "trojan" || normalizedProtocol === "hysteria2" || normalizedProtocol === "anytls" || normalizedProtocol === "tuic") config.tls = true;
   if (query.get("sni")) config.sni = query.get("sni");
   if (query.get("type") && query.get("type") !== "tcp") config.network = query.get("type");
   if (query.get("flow")) config.flow = query.get("flow");

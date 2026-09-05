@@ -86,7 +86,7 @@ export async function generateSubscription(env: Env, token: string, requestedTar
   const cacheTtl = Math.max(60, Math.min(access.cache_ttl || Number(env.SUB_CACHE_TTL) || 300, 86_400));
   if (cached) return { ...cached, name: access.slug || access.name, cacheTtl, tokenId: access.token_id };
   const result = await env.DB.prepare(
-    "SELECT n.* FROM nodes n JOIN subscription_sources ss ON ss.source_id = n.source_id WHERE ss.subscription_id = ? AND n.enabled = 1 AND n.present = 1",
+    "SELECT n.* FROM nodes n JOIN subscription_sources ss ON ss.source_id = n.source_id JOIN sources s ON s.id = n.source_id WHERE ss.subscription_id = ? AND s.enabled = 1 AND n.enabled = 1 AND n.present = 1",
   ).bind(access.subscription_id).all<NodeRow>();
   const nodes = applySubscriptionRules(result.results.map(rowToNode), parseRules(access.rules_json));
   const rendered = renderSubscription(nodes, target);

@@ -1,31 +1,38 @@
 import { stringify } from "yaml";
 import type { NormalizedNode, SubscriptionRules, SubscriptionTarget } from "../../../shared/types";
-import { encodeBase64Text } from "../input/shared";
+import { compileSafePattern, runSafePattern } from "../../security/regex";
+import { decodeBase64Text, encodeBase64Text } from "../input/shared";
 
-function safeRegex(pattern: string): RegExp | undefined {
-  if (pattern.length > 200) return undefined;
-  try { return new RegExp(pattern, "iu"); } catch { return undefined; }
-}
+// ─── Subscription rules (linear-time regex engine) ───────────────────
+//
+// Name filters are compiled with the linear-time safe engine from
+// security/regex.ts (Thompson NFA + Pike VM), never the runtime's
+// backtracking RegExp, so untrusted patterns cannot stall a request.
+// Patterns that were stored before stricter validation existed and no
+// longer compile are silently skipped (the rule has no effect) instead of
+// breaking the subscription.
 
 export function applySubscriptionRules(nodes: NormalizedNode[], rules: SubscriptionRules): NormalizedNode[] {
   const protocols = new Set(rules.protocols?.map((value) => value.toLowerCase()) ?? []);
-  const include = rules.includeName ? safeRegex(rules.includeName) : undefined;
-  const exclude = rules.excludeName ? safeRegex(rules.excludeName) : undefined;
+  const include = rules.includeName ? compileSafePattern(rules.includeName) : undefined;
+  const exclude = rules.excludeName ? compileSafePattern(rules.excludeName) : undefined;
+  const rename = (rules.rename ?? [])
+    .map((rule) => ({ compiled: compileSafePattern(rule.pattern), replacement: rule.replacement.slice(0, 200) }))
+    .filter((rule): rule is { compiled: NonNullable<ReturnType<typeof compileSafePattern>>; replacement: string } => rule.compiled !== null);
   const requiredTags = new Set(rules.tags ?? []);
   const seen = new Set<string>();
   const output = nodes.filter((node) => {
     if (!node.enabled || seen.has(node.fingerprint)) return false;
     if (protocols.size > 0 && !protocols.has(node.protocol.toLowerCase())) return false;
     if (requiredTags.size > 0 && ![...requiredTags].every((tag) => node.tags.includes(tag))) return false;
-    if (include && !include.test(node.name)) return false;
-    if (exclude?.test(node.name)) return false;
+    if (include && !runSafePattern(include).test(node.name)) return false;
+    if (exclude && runSafePattern(exclude).test(node.name)) return false;
     seen.add(node.fingerprint);
     return true;
   }).map((node) => {
     let name = node.name;
-    for (const rule of rules.rename ?? []) {
-      const pattern = safeRegex(rule.pattern);
-      if (pattern) name = name.replace(pattern, rule.replacement.slice(0, 200));
+    for (const rule of rename) {
+      name = runSafePattern(rule.compiled).replace(name, rule.replacement);
     }
     return { ...node, name, config: { ...node.config, name } };
   });
@@ -38,10 +45,56 @@ export function applySubscriptionRules(nodes: NormalizedNode[], rules: Subscript
   return output;
 }
 
+// ─── Duration helpers ─────────────────────────────────────────────────
+//
+// AnyTLS idle-session timings are expressed differently per target:
+//   - sing-box expects a Go-style duration string ("30s") — a bare number
+//     is rejected by sing-box 1.14.
+//   - Mihomo expects an integer number of seconds — "30s" fails `mihomo -t`
+//     with "cannot parse 'idle-session-check-interval' as int".
+// These helpers convert between the URI/DB representation and each target.
+
+function durationToSeconds(value: unknown): number | undefined {
+  if (typeof value === "number") return Number.isFinite(value) ? Math.max(0, Math.round(value)) : undefined;
+  if (typeof value !== "string") return undefined;
+  const match = /^\s*(\d+(?:\.\d+)?)\s*(ms|s|m|h)?\s*$/u.exec(value.trim());
+  if (!match) return undefined;
+  const amount = Number(match[1]);
+  const multiplier = match[2] === "ms" ? 0.001 : match[2] === "m" ? 60 : match[2] === "h" ? 3600 : 1;
+  return Math.max(0, Math.round(amount * multiplier));
+}
+
+function singboxDuration(value: unknown): string | undefined {
+  if (typeof value === "string" && /^\d+(?:\.\d+)?(ms|s|m|h)$/u.test(value.trim())) return value.trim();
+  if (typeof value === "number" && Number.isFinite(value)) return Math.max(0, Math.round(value)) + "s";
+  return undefined;
+}
+
 // ─── Raw URI generation ──────────────────────────────────────────────
+//
+// Raw output must reflect renames and node-name edits while preserving the
+// URI-specific parameters and credentials of the original link. When the
+// stored raw URI's embedded name still matches the current node name the
+// original URI is returned verbatim (nothing is lost); once the name has
+// been changed the URI is regenerated from the normalized config, which
+// carries every parameter the parser captured.
+
+function rawUriMatchesName(uri: string, protocol: string, name: string): boolean {
+  try {
+    if (protocol === "vmess") {
+      const payload = JSON.parse(decodeBase64Text(uri.slice(8))) as Record<string, unknown>;
+      return payload.ps === name;
+    }
+    const hashIndex = uri.indexOf("#");
+    if (hashIndex < 0) return false;
+    return decodeURIComponent(uri.slice(hashIndex + 1)) === name;
+  } catch {
+    return false;
+  }
+}
 
 function uriForNode(node: NormalizedNode): string | undefined {
-  if (node.rawUri) return node.rawUri;
+  if (node.rawUri && rawUriMatchesName(node.rawUri, node.protocol, node.name)) return node.rawUri;
   const config = node.config;
   const name = encodeURIComponent(node.name);
 
@@ -79,7 +132,9 @@ function uriForNode(node: NormalizedNode): string | undefined {
   if (typeof credential !== "string") return undefined;
 
   const query = new URLSearchParams();
-  if (config.tls && node.protocol !== "anytls") query.set("security", "tls");
+  // AnyTLS is always TLS — no `security` parameter needed (and the official
+  // client rejects unknown ones); trojan/hysteria2/tuic imply TLS as well.
+  if (config.tls && node.protocol !== "anytls" && node.protocol !== "trojan" && node.protocol !== "hysteria2" && node.protocol !== "tuic") query.set("security", "tls");
   if (typeof config.sni === "string") query.set("sni", config.sni);
   if (typeof config.network === "string" && config.network !== "tcp") query.set("type", config.network);
   if (typeof config.flow === "string") query.set("flow", config.flow);
@@ -117,9 +172,25 @@ function uriForNode(node: NormalizedNode): string | undefined {
 }
 
 // ─── Mihomo / Clash Meta full config ─────────────────────────────────
+//
+// Target: Mihomo ≥ 1.19 (validated with `mihomo -t` on 1.19.30).
+
+function mihomoProxy(node: NormalizedNode): Record<string, unknown> {
+  const proxy: Record<string, unknown> = { ...node.config, name: node.name, type: node.protocol, server: node.server, port: node.port };
+  if (node.protocol === "anytls") {
+    // AnyTLS is TLS-only: emit it explicitly and map the idle-session
+    // timings to the integer-seconds form Mihomo's parser requires.
+    proxy.tls = true;
+    const check = durationToSeconds(proxy["idle-session-check-interval"]);
+    const timeout = durationToSeconds(proxy["idle-session-timeout"]);
+    if (check !== undefined) proxy["idle-session-check-interval"] = check;
+    if (timeout !== undefined) proxy["idle-session-timeout"] = timeout;
+  }
+  return proxy;
+}
 
 function buildMihomoConfig(nodes: NormalizedNode[]): Record<string, unknown> {
-  const proxies = nodes.map((node) => ({ ...node.config, name: node.name, type: node.protocol, server: node.server, port: node.port }));
+  const proxies = nodes.map(mihomoProxy);
   const proxyNames = proxies.map((p) => p.name as string);
 
   const proxyGroups = [
@@ -156,10 +227,34 @@ function buildMihomoConfig(nodes: NormalizedNode[]): Record<string, unknown> {
 }
 
 // ─── Sing-box JSON ───────────────────────────────────────────────────
+//
+// Target: sing-box 1.14.x (validated with `sing-box check` on 1.14.0).
+// Removed constructs are NOT emitted: the `dns` outbound (removed 1.13),
+// legacy DNS server objects (removed 1.14 — servers use `type` + `server`),
+// `geoip` route/DNS rules (removed 1.12 — replaced by `ip_is_private` /
+// `ip_cidr`), and implicit domain resolution (1.14 requires an explicit
+// `route.default_domain_resolver`).
+
+const ALWAYS_TLS_PROTOCOLS = new Set(["trojan", "hysteria2", "tuic", "anytls"]);
+
+function singboxTls(node: NormalizedNode): Record<string, unknown> | undefined {
+  const config = node.config;
+  if (!config.tls && !ALWAYS_TLS_PROTOCOLS.has(node.protocol)) return undefined;
+  const tls: Record<string, unknown> = {
+    enabled: true,
+    server_name: config.sni ?? config.servername ?? node.server,
+    insecure: Boolean(config["skip-cert-verify"]),
+    alpn: Array.isArray(config.alpn) ? config.alpn : undefined,
+  };
+  if (node.protocol === "anytls" && typeof config["client-fingerprint"] === "string") {
+    tls.utls = { enabled: true, fingerprint: config["client-fingerprint"] };
+  }
+  return tls;
+}
 
 function buildSingboxConfig(nodes: NormalizedNode[]): Record<string, unknown> {
   const outbounds: Record<string, unknown>[] = [];
-  const tagMap: Record<string, string>[] = [];
+  const tagMap: Array<{ tag: string; protocol: string }> = [];
 
   for (const node of nodes) {
     const tag = node.name;
@@ -174,7 +269,7 @@ function buildSingboxConfig(nodes: NormalizedNode[]): Record<string, unknown> {
       outbound.type = "vmess";
       outbound.uuid = config.uuid;
       outbound.security = config.cipher ?? "auto";
-      if (config.alterId) outbound.alter_id = Number(config.alterId);
+      if (config.alterId && Number(config.alterId) > 0) outbound.alter_id = Number(config.alterId);
     } else if (node.protocol === "vless") {
       outbound.type = "vless";
       outbound.uuid = config.uuid;
@@ -185,8 +280,7 @@ function buildSingboxConfig(nodes: NormalizedNode[]): Record<string, unknown> {
     } else if (node.protocol === "hysteria2") {
       outbound.type = "hysteria2";
       outbound.password = config.password;
-      if (config.obfs) outbound.obfs = config.obfs;
-      if (config["obfs-password"]) outbound.obfs_password = config["obfs-password"];
+      if (config.obfs) outbound.obfs = { type: config.obfs, password: config["obfs-password"] };
       if (config.up) outbound.up_mbps = Number(config.up);
       if (config.down) outbound.down_mbps = Number(config.down);
     } else if (node.protocol === "tuic") {
@@ -197,24 +291,17 @@ function buildSingboxConfig(nodes: NormalizedNode[]): Record<string, unknown> {
     } else if (node.protocol === "anytls") {
       outbound.type = "anytls";
       outbound.password = config.password;
-      if (config["idle-session-check-interval"]) outbound.idle_session_check_interval = config["idle-session-check-interval"];
-      if (config["idle-session-timeout"]) outbound.idle_session_timeout = config["idle-session-timeout"];
+      const check = singboxDuration(config["idle-session-check-interval"]);
+      const timeout = singboxDuration(config["idle-session-timeout"]);
+      if (check) outbound.idle_session_check_interval = check;
+      if (timeout) outbound.idle_session_timeout = timeout;
       if (typeof config["min-idle-session"] === "number") outbound.min_idle_session = config["min-idle-session"];
     } else {
       continue;
     }
 
-    if (config.tls) {
-      outbound.tls = {
-        enabled: true,
-        server_name: config.sni ?? config.servername,
-        insecure: Boolean(config["skip-cert-verify"]),
-        alpn: Array.isArray(config.alpn) ? config.alpn : undefined,
-      };
-      if (node.protocol === "anytls" && typeof config["client-fingerprint"] === "string") {
-        (outbound.tls as Record<string, unknown>).utls = { enabled: true, fingerprint: config["client-fingerprint"] };
-      }
-    }
+    const tls = singboxTls(node);
+    if (tls) outbound.tls = tls;
     if (config.network === "ws" && config["ws-opts"]) {
       const wsOpts = config["ws-opts"] as Record<string, unknown>;
       outbound.transport = {
@@ -233,29 +320,44 @@ function buildSingboxConfig(nodes: NormalizedNode[]): Record<string, unknown> {
 
   const proxyTags = tagMap.map((t) => t.tag);
 
-  outbounds.push({ type: "selector", tag: "🚀 节点选择", outbounds: ["♻️ 自动选择", ...proxyTags], default: "♻️ 自动选择" });
-  outbounds.push({ type: "urltest", tag: "♻️ 自动选择", outbounds: proxyTags, url: "https://www.gstatic.com/generate_204", interval: "5m", tolerance: 50 });
+  if (proxyTags.length > 0) {
+    outbounds.push({ type: "selector", tag: "🚀 节点选择", outbounds: ["♻️ 自动选择", ...proxyTags], default: "♻️ 自动选择" });
+    outbounds.push({ type: "urltest", tag: "♻️ 自动选择", outbounds: proxyTags, url: "https://www.gstatic.com/generate_204", interval: "5m", tolerance: 50 });
+  }
   outbounds.push({ type: "direct", tag: "DIRECT" });
-  outbounds.push({ type: "dns", tag: "dns-out" });
 
-  const routeRules = [
-    { domain_suffix: ["openai.com", "anthropic.com", "claude.ai", "gemini.google.com"], outbound: "🚀 节点选择" },
-    { domain_suffix: ["t.me", "telegram.org"], outbound: "🚀 节点选择" },
-    { domain_suffix: ["netflix.com", "nflxvideo.net", "youtube.com", "googlevideo.com"], outbound: "🚀 节点选择" },
-    { geoip: "cn", outbound: "DIRECT" },
+  const dnsServers: Record<string, unknown>[] = [];
+  if (proxyTags.length > 0) {
+    dnsServers.push({ type: "https", tag: "google", server: "dns.google", server_port: 443, detour: "🚀 节点选择" });
+  }
+  dnsServers.push({ type: "udp", tag: "local", server: "223.5.5.5", detour: "DIRECT" });
+
+  const routeRules: Record<string, unknown>[] = [
+    { ip_is_private: true, outbound: "DIRECT" },
   ];
+  if (proxyTags.length > 0) {
+    routeRules.push(
+      { domain_suffix: ["openai.com", "anthropic.com", "claude.ai", "gemini.google.com"], outbound: "🚀 节点选择" },
+      { domain_suffix: ["t.me", "telegram.org"], outbound: "🚀 节点选择" },
+      { domain_suffix: ["netflix.com", "nflxvideo.net", "youtube.com", "googlevideo.com"], outbound: "🚀 节点选择" },
+    );
+  }
 
   return {
     log: { level: "info" },
     dns: {
-      servers: [
-        { tag: "google", address: "https://dns.google/dns-query", detour: "🚀 节点选择" },
-        { tag: "local", address: "223.5.5.5", detour: "DIRECT" },
+      servers: dnsServers,
+      rules: [
+        { domain_suffix: [".cn"], server: "local" },
+        { query_type: ["A", "AAAA"], server: proxyTags.length > 0 ? "google" : "local" },
       ],
-      rules: [{ geoip: "cn", server: "local" }],
     },
     outbounds,
-    route: { rules: routeRules, final: "🚀 节点选择" },
+    route: {
+      default_domain_resolver: { server: proxyTags.length > 0 ? "google" : "local" },
+      rules: routeRules,
+      final: proxyTags.length > 0 ? "🚀 节点选择" : "DIRECT",
+    },
   };
 }
 

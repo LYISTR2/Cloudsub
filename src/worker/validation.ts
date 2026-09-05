@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { validateSafePattern } from "./security/regex";
 
 // ─── Centralised request-body schemas ────────────────────────────────
 // Extracted from the route handlers so every module validates against a
@@ -48,13 +49,23 @@ export const nodeBatchSchema = z.object({
   tags: z.array(z.string().trim().min(1).max(40)).max(20).optional(),
 });
 
+/**
+ * Name-filter pattern validated against the linear-time safe subset
+ * (security/regex.ts). Invalid or unsafe patterns are rejected at the API
+ * with the engine's human-readable reason instead of being stored.
+ */
+const safeNamePattern = z.string().max(200).superRefine((value, context) => {
+  const reason = validateSafePattern(value);
+  if (reason !== null) context.addIssue({ code: "custom", message: reason });
+});
+
 export const rulesSchema = z.object({
   protocols: z.array(z.string().trim().min(1).max(30)).max(20).optional(),
   tags: z.array(z.string().trim().min(1).max(40)).max(20).optional(),
-  includeName: z.string().max(200).optional(),
-  excludeName: z.string().max(200).optional(),
+  includeName: safeNamePattern.optional(),
+  excludeName: safeNamePattern.optional(),
   sortBy: z.enum(["name", "protocol", "source"]).optional(),
-  rename: z.array(z.object({ pattern: z.string().max(200), replacement: z.string().max(200) })).max(20).optional(),
+  rename: z.array(z.object({ pattern: safeNamePattern, replacement: z.string().max(200) })).max(20).optional(),
 });
 
 export const subscriptionCreateSchema = z.object({

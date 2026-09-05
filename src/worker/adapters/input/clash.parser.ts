@@ -17,6 +17,11 @@ export async function parseClashYaml(content: string): Promise<NormalizedNode[]>
     const server = typeof config.server === "string" ? config.server.trim() : "";
     const port = validPort(config.port);
     if (!name || !protocol || !server || !port) continue;
+    // AnyTLS (and TUIC) are TLS-only transports: the official clients and
+    // Mihomo default `tls` to true, and sing-box rejects an anytls/tuic
+    // outbound without a TLS block. Normalize the default here so output
+    // renderers never emit a TLS-less config for them.
+    if ((protocol === "anytls" || protocol === "tuic") && config.tls === undefined) config.tls = true;
     nodes.push(await completeNode({ name, protocol, server, port, config: { ...config, port }, rawUri: undefined }));
   }
   return nodes;

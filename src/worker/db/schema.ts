@@ -46,6 +46,7 @@ export const sources = sqliteTable(
     lastSuccessAt: text("last_success_at"),
     lastError: text("last_error"),
     contentHash: text("content_hash"),
+    refreshLease: text("refresh_lease"),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
   },
@@ -95,6 +96,36 @@ export const nodes = sqliteTable(
     index("idx_nodes_source_present_enabled").on(table.sourceId, table.present, table.enabled),
     index("idx_nodes_protocol_enabled").on(table.protocol, table.enabled, table.present),
     index("idx_nodes_fingerprint").on(table.fingerprint),
+  ],
+);
+
+/**
+ * Staging buffer for refresh promotion. A refresh writes parsed nodes here
+ * first, then promotes the whole set into `nodes` with a single atomic D1
+ * batch, so the previously promoted (last-good) node set stays fully intact
+ * if any part of the refresh fails. See migrations/0004_refresh_safety.sql.
+ */
+export const nodesStaging = sqliteTable(
+  "nodes_staging",
+  {
+    id: text("id").primaryKey(),
+    sourceId: text("source_id").notNull().references(() => sources.id, { onDelete: "cascade" }),
+    fingerprint: text("fingerprint").notNull(),
+    name: text("name").notNull(),
+    protocol: text("protocol").notNull(),
+    server: text("server").notNull(),
+    port: integer("port").notNull(),
+    configJson: text("config_json").notNull(),
+    tagsJson: text("tags_json").notNull().default("[]"),
+    rawUri: text("raw_uri"),
+    enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+    present: integer("present", { mode: "boolean" }).notNull().default(true),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("nodes_staging_source_fingerprint_unique").on(table.sourceId, table.fingerprint),
+    index("idx_nodes_staging_source").on(table.sourceId),
   ],
 );
 

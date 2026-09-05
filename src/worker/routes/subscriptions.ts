@@ -11,7 +11,7 @@ import { previewSchema, subscriptionCreateSchema, subscriptionUpdateSchema } fro
 async function subscriptionPreview(env: Env, id: string, targetOverride?: SubscriptionTarget): Promise<{ rendered: ReturnType<typeof renderSubscription>; count: number }> {
   const subscription = await env.DB.prepare("SELECT default_target, rules_json FROM subscriptions WHERE id = ?").bind(id).first<{ default_target: SubscriptionTarget; rules_json: string }>();
   if (!subscription) throw new AppError(404, "订阅不存在", "subscription_not_found");
-  const result = await env.DB.prepare("SELECT n.* FROM nodes n JOIN subscription_sources ss ON ss.source_id = n.source_id WHERE ss.subscription_id = ? AND n.enabled = 1 AND n.present = 1").bind(id).all<any>();
+  const result = await env.DB.prepare("SELECT n.* FROM nodes n JOIN subscription_sources ss ON ss.source_id = n.source_id JOIN sources s ON s.id = n.source_id WHERE ss.subscription_id = ? AND s.enabled = 1 AND n.enabled = 1 AND n.present = 1").bind(id).all<any>();
   const nodes: NormalizedNode[] = result.results.map((row) => ({
     id: row.id, sourceId: row.source_id, fingerprint: row.fingerprint, name: row.name, protocol: row.protocol, server: row.server, port: row.port,
     config: JSON.parse(row.config_json), tags: JSON.parse(row.tags_json), rawUri: row.raw_uri ?? undefined, enabled: Boolean(row.enabled),
@@ -68,20 +68,25 @@ export function registerSubscriptionRoutes(app: Hono<AppBindings>): void {
       if (available?.count !== new Set(input.sourceIds).size) throw new AppError(422, "包含不存在的数据源", "invalid_source_selection");
     }
     const now = new Date().toISOString();
-    await context.env.DB.prepare("UPDATE subscriptions SET name = ?, enabled = ?, default_target = ?, rules_json = ?, revision = revision + 1, expires_at = ?, cache_ttl = ?, updated_at = ? WHERE id = ?").bind(
-      input.name ?? current.name,
-      (input.enabled ?? Boolean(current.enabled)) ? 1 : 0,
-      input.defaultTarget ?? current.default_target,
-      JSON.stringify(input.rules ?? JSON.parse(current.rules_json)),
-      input.expiresAt === undefined ? current.expires_at : input.expiresAt,
-      input.cacheTtl ?? current.cache_ttl,
-      now,
-      id,
-    ).run();
+    const statements: D1PreparedStatement[] = [
+      context.env.DB.prepare("UPDATE subscriptions SET name = ?, enabled = ?, default_target = ?, rules_json = ?, revision = revision + 1, expires_at = ?, cache_ttl = ?, updated_at = ? WHERE id = ?").bind(
+        input.name ?? current.name,
+        (input.enabled ?? Boolean(current.enabled)) ? 1 : 0,
+        input.defaultTarget ?? current.default_target,
+        JSON.stringify(input.rules ?? JSON.parse(current.rules_json)),
+        input.expiresAt === undefined ? current.expires_at : input.expiresAt,
+        input.cacheTtl ?? current.cache_ttl,
+        now,
+        id,
+      ),
+    ];
     if (input.sourceIds) {
-      await context.env.DB.prepare("DELETE FROM subscription_sources WHERE subscription_id = ?").bind(id).run();
-      await context.env.DB.batch([...new Set(input.sourceIds)].map((sourceId) => context.env.DB.prepare("INSERT INTO subscription_sources (subscription_id, source_id) VALUES (?, ?)").bind(id, sourceId)));
+      statements.push(
+        context.env.DB.prepare("DELETE FROM subscription_sources WHERE subscription_id = ?").bind(id),
+        ...[...new Set(input.sourceIds)].map((sourceId) => context.env.DB.prepare("INSERT INTO subscription_sources (subscription_id, source_id) VALUES (?, ?)").bind(id, sourceId)),
+      );
     }
+    await context.env.DB.batch(statements);
     const principal = context.get("principal");
     await writeAudit(context.env, { adminId: principal.adminId, action: "subscription.update", targetType: "subscription", targetId: id, requestId: context.get("requestId") });
     return context.json({ data: { id } });

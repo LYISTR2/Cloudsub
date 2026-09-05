@@ -241,6 +241,9 @@ td.actions, .actions { display: flex; justify-content: flex-end; gap: 6px; }
 
 .token-reveal { display: flex; justify-content: space-between; align-items: center; gap: 20px; border: 1px solid var(--accent-dim); background: rgba(74,222,128,.04); border-radius: 0; padding: 15px 17px; margin-bottom: 20px; }
 .token-reveal p { margin-bottom: 5px; }
+.token-reveal-copy { flex: 1; min-width: 0; }
+.token-reveal-copy input { width: 100%; font-family: var(--mono, ui-monospace, monospace); font-size: 11px; color: #a5f5c8; background: #050705; border: 1px solid var(--line); padding: 8px 10px; caret-color: var(--accent); }
+.token-reveal-copy input:focus { outline: 1px solid var(--accent-dim); }
 .token-reveal strong { display: block; max-width: min(65vw, 740px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #a5f5c8; font-size: 11px; }
 .card-list { display: grid; gap: 8px; }
 .subscription-card { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 15px; border: 1px solid var(--line); background: var(--panel-2); border-radius: 0; padding: 15px; }
@@ -252,6 +255,17 @@ td.actions, .actions { display: flex; justify-content: flex-end; gap: 6px; }
 .modal-backdrop { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; padding: 30px; background: rgba(2,4,3,.85); }
 .modal { width: min(900px, 100%); max-height: 86vh; border: 1px solid var(--line-strong); border-radius: 0; background: #070a08; padding: 22px; box-shadow: none; }
 .modal pre { max-height: 62vh; overflow: auto; color: #a9b8a4; background: #050705; border: 1px solid var(--line); border-radius: 0; padding: 15px; font-size: 11px; line-height: 1.6; white-space: pre-wrap; }
+
+/* ————— Pagination / accessibility helpers ————— */
+.pagination { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 14px; border-top: 1px solid var(--line); padding-top: 12px; }
+.pagination span { color: #71806c; font-size: 11px; }
+.loader-inline { display: inline-block; width: 12px; height: 12px; border: 2px solid var(--line-strong); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; vertical-align: -2px; margin-right: 6px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.error-empty { color: var(--danger, #f87171); }
+.error-empty p { margin-bottom: 10px; }
+.rename-list { display: grid; gap: 8px; margin-top: 10px; }
+.rename-list .form-grid { grid-template-columns: 1fr 1fr auto; align-items: end; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 
 /* ————— Timeline / logs ————— */
 .timeline { display: grid; }
